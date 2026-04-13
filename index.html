@@ -1,0 +1,2354 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marius & Fanny — Plateforme RH</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Fredoka+One&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sky:#80B0E8;--sky-light:#B8D4F4;--sky-pale:#DCE9F8;--sky-deep:#4A7FC1;--sky-dark:#1E3A5F;
+  --cream:#E8D870;--cream-light:#F5EFA0;--cream-pale:#FDFBE8;--cream-dark:#B8A830;
+  --white:#FFFFFF;--navy:#1C2E45;--navy-mid:#2E4A6E;--navy-light:#3D6494;
+  --border:#A8C8EE;--border-light:#C8DDF4;--text-main:#1C2E45;--text-mid:#3D6494;--text-muted:#6890BE;
+  --green:#52C98A;--green-light:#D0F4E4;--green-dark:#1E8A52;
+  --orange:#F08050;--orange-light:#FCDECE;--red:#E85050;--red-light:#FCDCDC;
+  --purple:#8878E8;--purple-light:#E0DCFF;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Nunito',sans-serif;background:var(--sky-pale);color:var(--text-main);min-height:100vh;}
+
+/* AUTH */
+.auth-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--sky-dark);padding:2rem;position:relative;overflow:hidden;}
+.auth-screen::before{content:'';position:absolute;width:500px;height:500px;border-radius:50%;background:var(--sky);opacity:0.12;top:-150px;right:-150px;}
+.auth-screen::after{content:'';position:absolute;width:350px;height:350px;border-radius:50%;background:var(--cream);opacity:0.08;bottom:-100px;left:-100px;}
+.auth-logo{text-align:center;margin-bottom:1.5rem;z-index:1;}
+
+.auth-logo .tagline{color:var(--sky-light);font-size:0.82rem;margin-top:6px;letter-spacing:2px;text-transform:uppercase;font-weight:700;}
+.auth-card{background:var(--white);border-radius:24px;padding:2rem;width:100%;max-width:440px;z-index:1;border:3px solid var(--sky-light);}
+.lang-toggle,.role-tabs{display:flex;gap:8px;margin-bottom:1.2rem;}
+.lang-btn,.role-tab{flex:1;padding:9px;border:2.5px solid var(--border-light);background:transparent;border-radius:12px;cursor:pointer;font-family:inherit;font-size:0.88rem;font-weight:700;transition:all 0.15s;text-align:center;color:var(--text-mid);}
+.lang-btn.active{border-color:var(--cream);background:var(--cream-pale);color:var(--navy);}
+.role-tab.active{border-color:var(--sky);background:var(--sky-pale);color:var(--sky-dark);}
+.field-group{margin-bottom:1rem;}
+.field-group label{font-size:0.75rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;}
+.field-group input,.field-group select{width:100%;padding:10px 14px;border:2.5px solid var(--border-light);border-radius:12px;font-family:inherit;font-size:0.95rem;font-weight:600;outline:none;color:var(--text-main);}
+.field-group input:focus,.field-group select:focus{border-color:var(--sky);}
+.btn-primary{width:100%;padding:13px;background:var(--sky);border:none;border-radius:14px;font-family:inherit;font-size:1rem;font-weight:800;cursor:pointer;color:var(--white);transition:all 0.15s;}
+.btn-primary:hover{background:var(--sky-deep);}
+.training-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;}
+.training-check{display:flex;align-items:center;gap:8px;padding:9px 12px;border:2.5px solid var(--border-light);border-radius:12px;cursor:pointer;font-size:0.85rem;font-weight:700;color:var(--text-mid);transition:all 0.15s;}
+.training-check.sel{border-color:var(--sky);background:var(--sky-pale);color:var(--sky-dark);}
+.forgot-link{text-align:center;margin-top:0.75rem;font-size:0.82rem;color:var(--text-muted);cursor:pointer;font-weight:700;}
+.forgot-link:hover{color:var(--sky-deep);}
+
+/* PIN PAD */
+.pin-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(28,46,69,0.85);z-index:300;display:flex;align-items:center;justify-content:center;padding:1rem;}
+.pin-box{background:var(--white);border-radius:24px;padding:2rem;width:100%;max-width:340px;border:3px solid var(--sky-light);text-align:center;}
+.pin-box h2{font-size:1.1rem;font-weight:900;color:var(--navy);margin-bottom:0.5rem;}
+.pin-box p{font-size:0.85rem;color:var(--text-muted);font-weight:600;margin-bottom:1.5rem;}
+.pin-dots{display:flex;justify-content:center;gap:12px;margin-bottom:1.5rem;}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2.5px solid var(--border);background:transparent;transition:all 0.15s;}
+.pin-dot.filled{background:var(--sky);border-color:var(--sky-deep);}
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.pin-btn{padding:14px;background:var(--sky-pale);border:2px solid var(--border-light);border-radius:12px;font-family:inherit;font-size:1.1rem;font-weight:800;cursor:pointer;color:var(--navy);transition:all 0.15s;}
+.pin-btn:hover{background:var(--sky-light);}
+.pin-btn.del{background:var(--red-light);border-color:var(--red);color:var(--red);}
+.pin-btn.cancel-btn{background:var(--cream-pale);border-color:var(--cream);color:var(--navy);grid-column:span 2;}
+.pin-error{color:var(--red);font-size:0.82rem;font-weight:800;margin-top:0.75rem;min-height:1.4em;}
+
+/* APP LAYOUT */
+.app{display:flex;min-height:100vh;}
+.sidebar{width:250px;background:var(--navy);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;overflow-y:auto;z-index:100;}
+.sidebar-brand{padding:1.2rem;border-bottom:1px solid var(--navy-mid);display:flex;flex-direction:column;align-items:center;}
+
+.sidebar-brand .sub{font-size:0.65rem;color:var(--sky-light);letter-spacing:1.5px;text-transform:uppercase;margin-top:6px;font-weight:700;opacity:0.7;}
+.sidebar-user{padding:0.8rem 1rem;background:var(--navy-mid);margin:0.6rem 0.8rem;border-radius:14px;border:1px solid var(--navy-light);}
+.sidebar-user .uname{font-size:0.88rem;font-weight:800;color:var(--cream-light);}
+.sidebar-user .urole{font-size:0.72rem;color:var(--sky-light);margin-top:2px;font-weight:600;}
+.sidebar-user .uprogress{font-size:0.72rem;color:var(--green);margin-top:4px;font-weight:700;}
+.nav-section{padding:0.5rem 0.8rem;}
+.nav-label{font-size:0.62rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--navy-light);padding:0.5rem 0.4rem 0.3rem;font-weight:800;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;cursor:pointer;font-size:0.88rem;font-weight:700;color:var(--sky-light);margin-bottom:3px;transition:all 0.15s;position:relative;}
+.nav-item:hover{background:var(--navy-mid);color:var(--white);}
+.nav-item.active{background:var(--sky);color:var(--white);}
+.nav-icon{width:18px;text-align:center;font-size:1rem;}
+.notif-badge{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:var(--red);color:white;font-size:0.65rem;font-weight:900;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;}
+.sidebar-footer{margin-top:auto;padding:1rem 0.8rem;border-top:1px solid var(--navy-mid);display:flex;flex-direction:column;gap:8px;}
+.home-btn{width:100%;padding:10px;background:var(--cream);border:none;border-radius:12px;color:var(--navy);font-family:inherit;font-size:0.88rem;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+.home-btn:hover{background:var(--cream-light);}
+.logout-btn{width:100%;padding:10px;background:transparent;border:2px solid var(--navy-mid);border-radius:12px;color:var(--sky-light);font-family:inherit;font-size:0.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+.logout-btn:hover{border-color:var(--red);color:var(--red);}
+
+.main{margin-left:250px;padding:2rem;flex:1;}
+.page-header{margin-bottom:1.5rem;display:flex;justify-content:space-between;align-items:flex-start;}
+.page-header h1{font-size:1.6rem;font-weight:900;color:var(--navy);}
+.page-header p{color:var(--text-muted);font-size:0.9rem;margin-top:4px;font-weight:600;}
+.page-home-btn{display:flex;align-items:center;gap:6px;padding:8px 16px;background:var(--cream);border:none;border-radius:12px;font-family:inherit;font-size:0.82rem;font-weight:800;cursor:pointer;color:var(--navy);}
+.page-home-btn:hover{background:var(--cream-light);}
+
+/* CARDS */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:1.5rem;}
+.stat-card{border-radius:18px;padding:1.2rem;border:2.5px solid;}
+.stat-card .stat-label{font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;font-weight:800;}
+.stat-card .stat-value{font-size:2rem;font-weight:900;margin-top:4px;}
+.stat-card.sky{background:var(--sky-pale);border-color:var(--sky);}.stat-card.sky .stat-label{color:var(--sky-deep);}.stat-card.sky .stat-value{color:var(--sky-dark);}
+.stat-card.cream{background:var(--cream-pale);border-color:var(--cream);}.stat-card.cream .stat-label{color:var(--cream-dark);}.stat-card.cream .stat-value{color:var(--navy);}
+.stat-card.green{background:var(--green-light);border-color:var(--green);}.stat-card.green .stat-label{color:var(--green-dark);}.stat-card.green .stat-value{color:var(--green-dark);}
+.stat-card.orange{background:var(--orange-light);border-color:var(--orange);}.stat-card.orange .stat-label{color:var(--orange);}.stat-card.orange .stat-value{color:var(--orange);}
+.section-card{background:var(--white);border-radius:18px;padding:1.5rem;border:2.5px solid var(--border-light);margin-bottom:1rem;}
+.section-card h3{font-size:1rem;font-weight:800;margin-bottom:1rem;color:var(--navy);}
+
+/* TABLES */
+.emp-table,.salary-table{width:100%;border-collapse:collapse;}
+.emp-table th,.salary-table th{font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-weight:800;padding:8px 12px;text-align:left;border-bottom:2px solid var(--border-light);}
+.emp-table td,.salary-table td{padding:10px 12px;font-size:0.88rem;font-weight:600;border-bottom:1.5px solid var(--border-light);vertical-align:middle;color:var(--text-main);}
+.emp-table tr:hover td,.salary-table tr:hover td{background:var(--sky-pale);}
+.status-pill{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.72rem;font-weight:800;}
+.status-pill.completed{background:var(--green-light);color:var(--green-dark);}
+.status-pill.in-progress{background:var(--cream-pale);color:var(--cream-dark);}
+.status-pill.new-emp{background:var(--sky-pale);color:var(--sky-deep);}
+
+/* DOC LIST */
+.doc-list{display:flex;flex-direction:column;gap:8px;}
+.doc-item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--sky-pale);border-radius:14px;cursor:pointer;border:2px solid transparent;transition:all 0.15s;}
+.doc-item:hover{background:var(--cream-pale);border-color:var(--cream);}
+.doc-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;}
+.doc-icon.yellow{background:var(--cream);}.doc-icon.green{background:var(--green-light);}
+.doc-icon.black{background:var(--navy);color:white;}.doc-icon.red{background:var(--red-light);}
+.doc-icon.purple{background:var(--purple-light);}.doc-icon.sky{background:var(--sky);color:white;}
+.doc-info{flex:1;}
+.doc-info .doc-title{font-size:0.9rem;font-weight:800;color:var(--navy);}
+.doc-info .doc-sub{font-size:0.78rem;color:var(--text-muted);margin-top:2px;font-weight:600;}
+.doc-check{width:24px;height:24px;border-radius:50%;border:2.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:transparent;flex-shrink:0;}
+.doc-check.checked{background:var(--sky);border-color:var(--sky-deep);color:var(--white);}
+
+/* ATTEST */
+.attest-box{background:var(--cream-pale);border:2.5px solid var(--cream);border-radius:14px;padding:1.2rem;margin-top:1rem;}
+.attest-box p{font-size:0.88rem;font-weight:700;color:var(--navy);margin-bottom:0.75rem;line-height:1.6;}
+.attest-btn{padding:10px 22px;background:var(--sky);color:var(--white);border:none;border-radius:12px;font-family:inherit;font-size:0.9rem;font-weight:800;cursor:pointer;}
+.attest-done{display:flex;align-items:center;gap:8px;color:var(--sky-deep);font-weight:800;font-size:0.9rem;}
+
+/* MODAL */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(28,46,69,0.65);z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;}
+.modal{background:var(--white);border-radius:24px;width:100%;max-width:640px;max-height:92vh;overflow-y:auto;border:3px solid var(--border-light);}
+.modal.wide{max-width:800px;}
+.modal-header{padding:1.5rem 1.5rem 1rem;border-bottom:2px solid var(--border-light);position:sticky;top:0;background:var(--white);z-index:1;display:flex;align-items:center;justify-content:space-between;border-radius:22px 22px 0 0;}
+.modal-header h2{font-size:1.15rem;font-weight:900;color:var(--navy);}
+.modal-close{background:var(--sky-pale);border:none;border-radius:8px;font-size:1rem;cursor:pointer;color:var(--text-mid);padding:6px 10px;font-weight:800;}
+.modal-body{padding:1.5rem;}
+.modal-footer{padding:1rem 1.5rem;border-top:2px solid var(--border-light);display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;}
+.btn-sec{padding:9px 18px;border:2.5px solid var(--border);background:transparent;border-radius:12px;font-family:inherit;font-size:0.9rem;font-weight:700;cursor:pointer;color:var(--text-mid);}
+.btn-sky{padding:9px 18px;background:var(--sky);color:var(--white);border:none;border-radius:12px;font-family:inherit;font-size:0.9rem;font-weight:800;cursor:pointer;}
+.btn-cream{padding:9px 18px;background:var(--cream);color:var(--navy);border:none;border-radius:12px;font-family:inherit;font-size:0.9rem;font-weight:800;cursor:pointer;}
+.btn-green{padding:9px 18px;background:var(--green);color:var(--white);border:none;border-radius:12px;font-family:inherit;font-size:0.9rem;font-weight:800;cursor:pointer;}
+.btn-danger{padding:9px 18px;background:var(--red);color:var(--white);border:none;border-radius:12px;font-family:inherit;font-size:0.9rem;font-weight:800;cursor:pointer;}
+.btn-orange{padding:9px 18px;background:var(--orange);color:var(--white);border:none;border-radius:12px;font-family:inherit;font-size:0.9rem;font-weight:800;cursor:pointer;}
+
+/* FORMS */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1rem;}
+.form-row.full{grid-template-columns:1fr;}
+.form-field label{font-size:0.75rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:5px;}
+.form-field input,.form-field select,.form-field textarea{width:100%;padding:9px 12px;border:2.5px solid var(--border-light);border-radius:12px;font-family:inherit;font-size:0.9rem;font-weight:600;outline:none;color:var(--text-main);}
+.form-field input:focus,.form-field select:focus,.form-field textarea:focus{border-color:var(--sky);}
+.form-field textarea{resize:vertical;min-height:80px;}
+
+/* TIMELINE */
+.timeline{position:relative;padding-left:22px;}
+.timeline::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:3px;background:var(--border-light);border-radius:2px;}
+.timeline-item{position:relative;margin-bottom:1rem;}
+.timeline-item::before{content:'';position:absolute;left:-17px;top:5px;width:12px;height:12px;border-radius:50%;background:var(--sky);border:3px solid var(--white);box-shadow:0 0 0 2px var(--sky);}
+.timeline-item .tl-date{font-size:0.75rem;color:var(--text-muted);font-weight:700;}
+.timeline-item .tl-val{font-size:1rem;font-weight:900;color:var(--navy);}
+.timeline-item .tl-note{font-size:0.8rem;color:var(--text-muted);font-weight:600;}
+
+/* EVAL */
+.eval-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1.5px solid var(--border-light);}
+.eval-row:last-child{border-bottom:none;}
+.eval-row .eval-label{flex:1;font-size:0.88rem;font-weight:700;color:var(--text-main);}
+.score-dot{width:28px;height:28px;border-radius:50%;border:2.5px solid var(--border-light);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:800;color:var(--text-muted);transition:all 0.1s;}
+.score-dot.active{background:var(--sky);border-color:var(--sky-deep);color:var(--white);}
+.score-dot.readonly{cursor:default;}
+.eval-section-label{display:inline-block;font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--white);background:var(--sky-deep);padding:4px 14px;border-radius:20px;margin:1rem 0 0.5rem;}
+
+/* WARNINGS */
+.warn-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:0.78rem;font-weight:800;}
+.warn-badge.oral{background:var(--cream-pale);color:var(--cream-dark);}
+.warn-badge.written{background:var(--red-light);color:var(--red);}
+
+/* PROGRESS */
+.progress-bar{background:var(--border-light);border-radius:20px;height:8px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--sky),var(--cream));border-radius:20px;}
+
+/* CHIPS */
+.chip{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.72rem;font-weight:800;background:var(--sky-pale);color:var(--sky-deep);margin:2px;}
+.chip.green{background:var(--green-light);color:var(--green-dark);}
+.chip.red{background:var(--red-light);color:var(--red);}
+.chip.cream{background:var(--cream-pale);color:var(--cream-dark);}
+
+/* UPLOAD */
+.upload-zone{border:3px dashed var(--border);border-radius:16px;padding:2rem;text-align:center;cursor:pointer;background:var(--sky-pale);}
+.upload-zone:hover{border-color:var(--sky-deep);background:var(--cream-pale);}
+.file-preview{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--green-light);border-radius:14px;margin-top:1rem;border:2px solid var(--green);}
+.file-preview .fp-name{font-size:0.9rem;font-weight:800;color:var(--green-dark);flex:1;}
+.file-preview .fp-remove{background:none;border:none;cursor:pointer;color:var(--red);font-size:1rem;}
+.btn-download{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;background:var(--sky);color:var(--white);border:none;border-radius:12px;font-family:inherit;font-size:0.88rem;font-weight:800;cursor:pointer;text-decoration:none;}
+
+/* PDF iframe fix */
+.pdf-viewer{width:100%;height:500px;border:2px solid var(--border-light);border-radius:12px;background:var(--white);}
+
+/* OTHER */
+.salary-increase{font-size:0.72rem;color:var(--green-dark);font-weight:800;}
+.new-doc-badge{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-left:6px;vertical-align:middle;}
+.cat-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;}
+.cat-badge{font-size:0.7rem;padding:4px 12px;border-radius:20px;font-weight:800;background:var(--sky-pale);color:var(--sky-deep);}
+.doc-content{font-size:0.9rem;line-height:1.7;font-weight:600;color:var(--text-main);}
+.doc-content h3{font-size:1rem;font-weight:900;margin:1rem 0 0.5rem;color:var(--sky-deep);}
+.doc-content p{margin-bottom:0.75rem;}
+.doc-content ul{padding-left:1.2rem;margin-bottom:0.75rem;}
+.doc-content li{margin-bottom:4px;}
+
+/* QUIZ */
+.quiz-card{background:var(--cream-pale);border:2.5px solid var(--cream);border-radius:16px;padding:1.5rem;margin-bottom:1rem;}
+.quiz-q{font-size:0.95rem;font-weight:800;color:var(--navy);margin-bottom:1rem;}
+.quiz-options{display:flex;flex-direction:column;gap:8px;}
+.quiz-option{padding:10px 14px;border:2.5px solid var(--border-light);border-radius:12px;cursor:pointer;font-size:0.88rem;font-weight:700;color:var(--text-main);transition:all 0.15s;background:var(--white);}
+.quiz-option:hover{border-color:var(--sky);background:var(--sky-pale);}
+.quiz-option.correct{border-color:var(--green);background:var(--green-light);color:var(--green-dark);}
+.quiz-option.wrong{border-color:var(--red);background:var(--red-light);color:var(--red);}
+.quiz-option.selected{border-color:var(--sky);background:var(--sky-pale);}
+
+/* ANNOTATION */
+.annotation-box{background:var(--sky-pale);border:2px solid var(--sky);border-radius:12px;padding:12px;margin-top:0.75rem;}
+.annotation-box .ann-label{font-size:0.72rem;font-weight:800;color:var(--sky-deep);text-transform:uppercase;margin-bottom:4px;}
+.annotation-box .ann-text{font-size:0.85rem;font-weight:600;color:var(--navy);}
+
+/* FILTER BAR */
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;}
+.filter-chip{padding:6px 14px;border:2px solid var(--border-light);border-radius:20px;cursor:pointer;font-size:0.78rem;font-weight:700;color:var(--text-mid);background:transparent;font-family:inherit;transition:all 0.15s;}
+.filter-chip.active{background:var(--sky);border-color:var(--sky-deep);color:var(--white);}
+
+/* NOTIF TOAST */
+.notif-toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--navy);color:var(--cream-light);padding:12px 20px;border-radius:16px;font-size:0.9rem;font-weight:700;z-index:999;transform:translateY(80px);opacity:0;transition:all 0.3s;max-width:300px;border:2px solid var(--sky);}
+.notif-toast.show{transform:translateY(0);opacity:1;}
+.notif-bar{height:3px;background:var(--cream);border-radius:2px;margin-top:8px;}
+@keyframes shrink{from{width:100%}to{width:0%}}
+
+/* WARN SIGNATURE */
+.warn-signature-box{background:var(--red-light);border:2.5px solid var(--red);border-radius:12px;padding:1rem;margin-top:1rem;}
+.warn-signature-box p{font-size:0.85rem;font-weight:700;color:var(--red);margin-bottom:0.75rem;}
+.warn-sig-done{font-size:0.85rem;font-weight:800;color:var(--red);}
+
+@media(max-width:768px){
+  .sidebar{width:200px;}
+  .main{margin-left:200px;padding:1rem;}
+  .form-row{grid-template-columns:1fr;}
+  .training-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="notif-toast" id="notif"><span id="notif-msg"></span><div class="notif-bar" id="notif-bar"></div></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// LOGO & CONSTANTS
+// ═══════════════════════════════════════════════════════
+
+let MANAGER_PIN = '4657';
+let ROLES_FR = ['Cuisine','Pâtisserie','Vente','Boulangerie','Chocolaterie','Emballeuse'];
+let ROLES_EN = ['Kitchen','Pastry','Sales','Bakery','Chocolate','Packaging'];
+let ROLE_ICONS = {
+  'Cuisine':'👨‍🍳','Pâtisserie':'🥐','Vente':'🛍️','Boulangerie':'🥖','Chocolaterie':'🍫','Emballeuse':'📦',
+  'Kitchen':'👨‍🍳','Pastry':'🥐','Sales':'🛍️','Bakery':'🥖','Chocolate':'🍫','Packaging':'📦'
+};
+
+// ═══════════════════════════════════════════════════════
+// STORAGE PERSISTENCE (localStorage with fallback)
+// ═══════════════════════════════════════════════════════
+const DB = {
+  key: 'mf_hr_v1',
+  save(data) {
+    try { localStorage.setItem(this.key, JSON.stringify(data)); } catch(e) {}
+  },
+  load() {
+    try {
+      const d = localStorage.getItem(this.key);
+      return d ? JSON.parse(d) : null;
+    } catch(e) { return null; }
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+// TRANSLATIONS
+// ═══════════════════════════════════════════════════════
+const T = {
+  fr: {
+    brand:'Marius & Fanny', tagline:'Plateforme RH',
+    login:'Se connecter', register:"S'inscrire",
+    name:'Prénom et nom', email:'Courriel', password:'Mot de passe', role:'Mon poste',
+    roles: ROLES_FR, employee:'Employé(e)', manager:'Gestionnaire',
+    welcome:'Bienvenue', dashboard:'Accueil', myDocs:'Mes documents',
+    evaluations:'Évaluations', warnings:'Avertissements', salary:'Salaire',
+    employees:'Employés', allDocs:'Documents', addEmployee:'+ Ajouter employé',
+    progress:'Progression', totalEmp:'Employés actifs', pendingEval:'Évals en attente',
+    warnings_count:'Avertissements', documents_validated:'Documents attestés',
+    integrationDocs:"Documents d'intégration",
+    section_policy:'Politiques', section_training:'Formations',
+    section_history:'Histoire', section_procedures:'Procédures', section_custom:'Autres',
+    completed:'Complété', inProgress:'En cours', newEmp:'Nouveau',
+    viewFile:'Voir le dossier', save:'Enregistrer', cancel:'Annuler',
+    addWarning:'Ajouter avertissement', addSalary:'Modifier salaire',
+    startEval:'Évaluation', selfEval:'Auto-évaluation', managerEval:'Éval. gestionnaire',
+    salaryHistory:'Historique', logout:'Déconnexion', home:'Accueil',
+    allCompleted:'Intégration complétée! 🎉', saved:'Enregistré!',
+    warningAdded:'Avertissement ajouté', per_hour:'$/h',
+    oral_warning:'Avertissement oral', written_warning:'Avertissement écrit',
+    hi:'Bonjour', your_progress:'Ma progression',
+    newDoc:'+ Nouveau document', docName:'Nom du document', docCat:'Catégorie', docRoles:'Postes visibles',
+    uploadPDF:'Téléverser un PDF', dragPDF:'Glisser un PDF ici ou cliquer',
+    pdfOnly:'Fichiers PDF seulement', addDoc:'Ajouter',
+    download:'Télécharger', pdfDoc:'Document PDF', uploadedBy:'Ajouté par',
+    attestText:"J'atteste avoir lu et compris ce document, et m'engage à respecter son contenu dans le cadre de mes fonctions chez Marius et Fanny.",
+    attestBtn:"✔ J'atteste avoir lu et compris", attestDone:'Attesté le ',
+    chooseTraining:"Mes formations (tout ce qui s'applique)",
+    salaryOverview:'Vue d\'ensemble — Salaires', hireDate:'Embauche',
+    increases:'Augmentations', noIncrease:'Aucune augmentation',
+    criteria:'Critères d\'évaluation', editCriteria:'Modifier les critères',
+    pinTitle:'Accès gestionnaire', pinSub:'Entrez le code à 4 chiffres',
+    pinError:'Code incorrect. Réessayez.',
+    quiz:'Quiz d\'intégration', quizEditor:'Éditeur de quiz',
+    forgotPwd:'Mot de passe oublié?',
+    forgotTitle:'Réinitialisation', forgotMsg:'Contactez votre gestionnaire pour réinitialiser votre mot de passe.',
+    filterAll:'Tous', filterByRole:'Filtrer par poste',
+    deleteEmp:'Supprimer l\'employé',
+    confirmDelete:'Êtes-vous sûr de vouloir supprimer cet employé?',
+    annotate:'Ajouter une annotation', annotation:'Annotation du gestionnaire',
+    warnSignTitle:'Signature de l\'avertissement',
+    warnSignText:'L\'employé doit écrire son nom complet pour attester avoir reçu cet avertissement.',
+    warnSignDone:'Reçu et signé par ',
+    evalCriteria: {
+      Cuisine: [
+        {cat:'Compétences techniques', items:['Maîtrise des techniques culinaires','Respect des recettes et standards','Hygiène et sécurité alimentaire','Gestion du temps en cuisine','Organisation du poste de travail','Gestion des inventaires et pertes']},
+        {cat:'Comportement professionnel', items:["Ponctualité et assiduité","Esprit d'équipe et entraide","Communication avec l'équipe",'Initiative et polyvalence','Gestion du stress en service','Attitude et professionnalisme']},
+      ],
+      Pâtisserie: [
+        {cat:'Compétences techniques', items:['Maîtrise des recettes de pâtisserie','Précision et rigueur dans la pesée','Qualité visuelle et esthétique','Respect des temps et températures','Hygiène et propreté du poste','Créativité et suggestions']},
+        {cat:'Comportement professionnel', items:["Ponctualité et assiduité",'Respect du planning de production',"Communication avec l'équipe",'Gestion des matières premières','Soin du matériel','Attitude et professionnalisme']},
+      ],
+      Vente: [
+        {cat:'Service à la clientèle', items:["Qualité de l'accueil et du sourire",'Connaissance des produits vendus','Connaissance des allergènes','Capacité à conseiller le client','Gestion des plaintes','Présentation personnelle']},
+        {cat:'Comportement professionnel', items:["Ponctualité et assiduité","Esprit d'équipe",'Gestion de la caisse',"Propreté de l'espace de vente",'Respect des procédures','Attitude générale et motivation']},
+      ],
+      Boulangerie: [
+        {cat:'Compétences techniques', items:['Maîtrise des pâtes et fermentations','Respect des temps de cuisson','Qualité et régularité des produits','Hygiène et propreté','Gestion des farines','Organisation du poste']},
+        {cat:'Comportement professionnel', items:["Ponctualité et assiduité","Esprit d'équipe",'Communication','Initiative','Soin du matériel','Attitude et professionnalisme']},
+      ],
+      Chocolaterie: [
+        {cat:'Compétences techniques', items:['Maîtrise du travail du chocolat','Précision et rigueur','Qualité visuelle des produits','Respect des températures','Hygiène et propreté','Créativité et innovation']},
+        {cat:'Comportement professionnel', items:["Ponctualité et assiduité","Esprit d'équipe",'Communication','Gestion des matières premières','Soin du matériel','Attitude et professionnalisme']},
+      ],
+      Emballeuse: [
+        {cat:'Compétences techniques', items:['Rapidité et efficacité','Qualité de l\'emballage','Respect des standards de présentation','Gestion des stocks','Hygiène et propreté','Respect des procédures']},
+        {cat:'Comportement professionnel', items:["Ponctualité et assiduité","Esprit d'équipe",'Communication','Initiative','Soin du matériel','Attitude générale et motivation']},
+      ],
+    },
+    quizTemplates: {
+      Cuisine: [
+        {q:"Quelle est la température minimale de cuisson pour les viandes?", opts:["60°C","74°C","90°C","100°C"], ans:1},
+        {q:"Quelle méthode de rotation des stocks doit-on utiliser?", opts:["LIFO","FIFO","Aléatoire","Date de réception"], ans:1},
+        {q:"À quelle fréquence doit-on se laver les mains en cuisine?", opts:["Toutes les heures","Toutes les 30 min","Seulement avant de commencer","Après chaque tâche souillée uniquement"], ans:1},
+      ],
+      Pâtisserie: [
+        {q:"Pourquoi doit-on peser tous les ingrédients en pâtisserie?", opts:["Pour économiser","Pour la précision et la constance","C'est obligatoire par loi","Pour éviter les allergènes"], ans:1},
+        {q:"Qu'est-ce que le tempérage du chocolat?", opts:["Le refroidir rapidement","Contrôler la cristallisation du beurre de cacao","Le chauffer à 100°C","Le mélanger avec de l'eau"], ans:1},
+      ],
+      Vente: [
+        {q:"Que faire si un client se plaint?", opts:["L'ignorer","L'écouter et escalader si nécessaire","Lui offrir un remboursement immédiat","Appeler la police"], ans:1},
+        {q:"Comment s'appelle l'affichage obligatoire des allergènes?", opts:["Étiquetage volontaire","INRS","Déclaration des 14 allergènes majeurs","Fiche de données de sécurité"], ans:2},
+      ],
+      Boulangerie: [
+        {q:"Qu'est-ce que la fermentation en panification?", opts:["Un refroidissement rapide","L'action des levures sur les sucres","Un type de pétrissage","Le façonnage du pain"], ans:1},
+        {q:"À quelle température cuit généralement le pain?", opts:["100-150°C","180-250°C","300-400°C","Moins de 100°C"], ans:1},
+      ],
+      Chocolaterie: [
+        {q:"Quelle est la plage de température idéale pour travailler le chocolat noir?", opts:["10-15°C","31-32°C","45-50°C","20-25°C"], ans:1},
+        {q:"Pourquoi est-il important de respecter la chaîne du froid pour le chocolat?", opts:["Pour l'esthétique","Pour maintenir la texture et éviter le bloom","Par obligation légale","Pour réduire les coûts"], ans:1},
+      ],
+      Emballeuse: [
+        {q:"Pourquoi l'étiquetage est-il crucial sur les produits emballés?", opts:["Pour l'esthétique seulement","Pour informer le client et respecter les normes","Pour augmenter le prix","Pour décorer"], ans:1},
+        {q:"Que faire si vous remarquez un emballage défectueux?", opts:["L'ignorer","Le signaler immédiatement au responsable","Le jeter sans le dire","Continuer à emballer"], ans:1},
+      ],
+    }
+  },
+  en: {
+    brand:'Marius & Fanny', tagline:'HR Platform',
+    login:'Sign in', register:'Register',
+    name:'Full name', email:'Email', password:'Password', role:'My position',
+    roles: ROLES_EN, employee:'Employee', manager:'Manager',
+    welcome:'Welcome', dashboard:'Home', myDocs:'My Documents',
+    evaluations:'Evaluations', warnings:'Warnings', salary:'Salary',
+    employees:'Employees', allDocs:'Documents', addEmployee:'+ Add employee',
+    progress:'Progress', totalEmp:'Active employees', pendingEval:'Pending evals',
+    warnings_count:'Warnings', documents_validated:'Attested documents',
+    integrationDocs:'Onboarding Documents',
+    section_policy:'Policies', section_training:'Training',
+    section_history:'Our Story', section_procedures:'Procedures', section_custom:'Other',
+    completed:'Completed', inProgress:'In progress', newEmp:'New',
+    viewFile:'View file', save:'Save', cancel:'Cancel',
+    addWarning:'Add warning', addSalary:'Update salary',
+    startEval:'Evaluation', selfEval:'Self-evaluation', managerEval:'Manager eval.',
+    salaryHistory:'History', logout:'Logout', home:'Home',
+    allCompleted:'Onboarding complete! 🎉', saved:'Saved!',
+    warningAdded:'Warning added', per_hour:'$/h',
+    oral_warning:'Verbal warning', written_warning:'Written warning',
+    hi:'Hello', your_progress:'My progress',
+    newDoc:'+ New document', docName:'Document name', docCat:'Category', docRoles:'Visible for roles',
+    uploadPDF:'Upload a PDF', dragPDF:'Drag a PDF here or click',
+    pdfOnly:'PDF files only', addDoc:'Add',
+    download:'Download', pdfDoc:'PDF Document', uploadedBy:'Added by',
+    attestText:"I attest that I have read and understood this document, and commit to respecting its content in my duties at Marius & Fanny.",
+    attestBtn:"✔ I attest I have read and understood", attestDone:'Attested on ',
+    chooseTraining:'My training (select all that apply)',
+    salaryOverview:'Salary Overview', hireDate:'Hire date',
+    increases:'Increases', noIncrease:'No increase yet',
+    criteria:'Evaluation criteria', editCriteria:'Edit criteria',
+    pinTitle:'Manager access', pinSub:'Enter the 4-digit code',
+    pinError:'Incorrect code. Try again.',
+    quiz:'Onboarding Quiz', quizEditor:'Quiz Editor',
+    forgotPwd:'Forgot password?',
+    forgotTitle:'Reset Password', forgotMsg:'Contact your manager to reset your password.',
+    filterAll:'All', filterByRole:'Filter by role',
+    deleteEmp:'Delete employee',
+    confirmDelete:'Are you sure you want to delete this employee?',
+    annotate:'Add annotation', annotation:'Manager annotation',
+    warnSignTitle:'Warning signature',
+    warnSignText:'The employee must write their full name to confirm receipt of this warning.',
+    warnSignDone:'Received and signed by ',
+    evalCriteria: {
+      Kitchen: [
+        {cat:'Technical skills', items:['Culinary technique mastery','Recipe compliance','Food hygiene','Time management','Workstation organization','Inventory management']},
+        {cat:'Professional behaviour', items:['Punctuality','Teamwork','Communication','Initiative','Stress management','Professionalism']},
+      ],
+      Pastry: [
+        {cat:'Technical skills', items:['Pastry recipe mastery','Precision in weighing','Visual quality','Temperature compliance','Hygiene','Creativity']},
+        {cat:'Professional behaviour', items:['Punctuality','Production planning','Communication','Raw materials','Equipment care','Professionalism']},
+      ],
+      Sales: [
+        {cat:'Customer service', items:['Welcome quality','Product knowledge','Allergen knowledge','Customer advising','Complaint handling','Personal presentation']},
+        {cat:'Professional behaviour', items:['Punctuality','Team spirit','Cash management','Cleanliness','Procedure compliance','General attitude']},
+      ],
+      Bakery: [
+        {cat:'Technical skills', items:['Dough mastery','Baking compliance','Product consistency','Hygiene','Ingredient management','Organization']},
+        {cat:'Professional behaviour', items:['Punctuality','Teamwork','Communication','Initiative','Equipment care','Professionalism']},
+      ],
+      Chocolate: [
+        {cat:'Technical skills', items:['Chocolate mastery','Precision','Visual quality','Temperature compliance','Hygiene','Creativity']},
+        {cat:'Professional behaviour', items:['Punctuality','Teamwork','Communication','Ingredient management','Equipment care','Professionalism']},
+      ],
+      Packaging: [
+        {cat:'Technical skills', items:['Speed and efficiency','Packaging quality','Presentation standards','Stock management','Hygiene','Procedure compliance']},
+        {cat:'Professional behaviour', items:['Punctuality','Teamwork','Communication','Initiative','Equipment care','General attitude']},
+      ],
+    },
+    quizTemplates: {
+      Kitchen: [
+        {q:"What is the minimum cooking temperature for meats?", opts:["60°C","74°C","90°C","100°C"], ans:1},
+        {q:"Which stock rotation method should be used?", opts:["LIFO","FIFO","Random","By receipt date"], ans:1},
+      ],
+      Pastry: [
+        {q:"Why do we weigh all ingredients in pastry?", opts:["To save money","For precision and consistency","It's legally required","To avoid allergens"], ans:1},
+      ],
+      Sales: [
+        {q:"What should you do if a customer complains?", opts:["Ignore them","Listen and escalate if needed","Offer immediate refund","Call security"], ans:1},
+      ],
+      Bakery: [
+        {q:"What is fermentation in bread making?", opts:["Rapid cooling","Yeast acting on sugars","A kneading type","Bread shaping"], ans:1},
+      ],
+      Chocolate: [
+        {q:"What is the ideal temperature for dark chocolate?", opts:["10-15°C","31-32°C","45-50°C","20-25°C"], ans:1},
+      ],
+      Packaging: [
+        {q:"Why is labeling crucial on packaged products?", opts:["Aesthetics only","Inform customers and comply with standards","Increase price","Decoration"], ans:1},
+      ],
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+// BUILTIN DOCUMENTS
+// ═══════════════════════════════════════════════════════
+const BUILTIN_DOCS = {
+  fr:[
+    {id:'d1',cat:'history',icon:'⭐',iconColor:'yellow',title:'Histoire de Marius et Fanny',sub:'Notre histoire, nos valeurs',isPDF:false,forRoles:null,content:`<h3>Notre histoire</h3><p>Marius et Fanny est né d'une passion commune pour la cuisine provençale et les saveurs authentiques du marché. Fondé il y a plus de 15 ans, notre établissement s'est construit sur des valeurs fortes : le respect du produit, la générosité et l'accueil chaleureux.</p><h3>Nos valeurs</h3><ul><li>Qualité et fraîcheur des produits</li><li>Respect de l'équipe et de la clientèle</li><li>Passion et fierté du travail bien fait</li><li>Convivialité et esprit de famille</li></ul>`},
+    {id:'d2',cat:'policy',icon:'📋',iconColor:'sky',title:'Code de conduite & Politiques',sub:"Règles et attentes de l'équipe",isPDF:false,forRoles:null,content:`<h3>Code de conduite</h3><p>Chez Marius et Fanny, nous attendons de chaque membre de l'équipe un comportement respectueux, professionnel et bienveillant.</p><h3>Politiques clés</h3><ul><li>Respect sans discrimination</li><li>Tolérance zéro pour le harcèlement</li><li>Utilisation responsable du matériel</li><li>Confidentialité des informations</li></ul>`},
+    {id:'d3',cat:'policy',icon:'🤝',iconColor:'green',title:"Comment on agit ici",sub:"Notre façon d'être ensemble",isPDF:false,forRoles:null,content:`<h3>L'esprit Marius et Fanny</h3><p>Ici, on travaille fort mais on prend soin les uns des autres. Le respect mutuel est non-négociable.</p><ul><li>On se parle directement et avec respect</li><li>Les conflits se règlent en privé</li><li>On valorise les idées de chacun</li></ul>`},
+    {id:'d4',cat:'procedure',icon:'🔑',iconColor:'yellow',title:'Ouverture & Fermeture',sub:'Marche à suivre quotidienne',isPDF:false,forRoles:null,content:`<h3>Ouverture</h3><ul><li>Arriver 15 min avant l'ouverture</li><li>Vérifier les températures des réfrigérateurs</li><li>Préparer les postes de travail</li></ul><h3>Fermeture</h3><ul><li>Nettoyer et désinfecter tous les postes</li><li>Sécuriser les accès — alarme et serrures</li></ul>`},
+    {id:'d5',cat:'training',icon:'👨‍🍳',iconColor:'green',title:'Formation Cuisine',sub:'Bases et standards',isPDF:false,forRoles:['Cuisine'],content:`<h3>Standards cuisine</h3><p>Chaque plat doit refléter notre passion et notre rigueur.</p><ul><li>Lavage des mains obligatoire toutes les 30 min</li><li>Température minimale : 74°C pour les viandes</li><li>Méthode FIFO respectée en tout temps</li></ul>`},
+    {id:'d6',cat:'training',icon:'🥐',iconColor:'yellow',title:'Formation Pâtisserie',sub:'Techniques et recettes',isPDF:false,forRoles:['Pâtisserie'],content:`<h3>La pâtisserie chez M&F</h3><p>Nos pâtisseries sont faites maison avec des ingrédients locaux.</p><ul><li>Respecter les fiches recettes à la lettre</li><li>Peser tous les ingrédients</li><li>Respecter les temps de repos et températures</li></ul>`},
+    {id:'d7',cat:'training',icon:'🛍️',iconColor:'black',title:'Formation Vente & Accueil',sub:'Service client et caisse',isPDF:false,forRoles:['Vente'],content:`<h3>L'accueil chez M&F</h3><p>Un sourire et une attention sincère font toute la différence.</p><ul><li>Proposer les suggestions du jour</li><li>Connaître les allergènes</li><li>Procédure de caisse quotidienne</li></ul>`},
+    {id:'d8',cat:'training',icon:'🥖',iconColor:'yellow',title:'Formation Boulangerie',sub:'Pains et viennoiseries',isPDF:false,forRoles:['Boulangerie'],content:`<h3>La boulangerie chez M&F</h3><p>Nos pains sont faits maison avec des farines locales.</p><ul><li>Respecter les temps de fermentation</li><li>Maîtriser les températures de cuisson</li></ul>`},
+    {id:'d9',cat:'training',icon:'🍫',iconColor:'black',title:'Formation Chocolaterie',sub:'Techniques du chocolat',isPDF:false,forRoles:['Chocolaterie'],content:`<h3>La chocolaterie chez M&F</h3><p>Nos chocolats sont travaillés avec soin et précision.</p><ul><li>Tempérage du chocolat</li><li>Respect de la chaîne du froid</li></ul>`},
+    {id:'d10',cat:'training',icon:'📦',iconColor:'sky',title:'Formation Emballage',sub:'Procédures et standards',isPDF:false,forRoles:['Emballeuse'],content:`<h3>L'emballage chez M&F</h3><p>La présentation est le reflet de notre qualité.</p><ul><li>Respecter les standards de présentation</li><li>Étiquetage correct des produits</li></ul>`},
+    {id:'d11',cat:'policy',icon:'⚠️',iconColor:'red',title:'Santé & Sécurité',sub:'Prévention et urgences',isPDF:false,forRoles:null,content:`<h3>Prévention</h3><ul><li>Signaler immédiatement tout danger</li><li>Porter les équipements requis</li></ul><h3>Urgences</h3><ul><li>Numéro d'urgence : 911</li><li>Trousse de premiers soins : sous le comptoir</li><li>Extincteur : à l'entrée de la cuisine</li></ul>`},
+  ],
+  en:[
+    {id:'d1',cat:'history',icon:'⭐',iconColor:'yellow',title:'The Story of Marius & Fanny',sub:'Our history and values',isPDF:false,forRoles:null,content:`<h3>Our story</h3><p>Marius & Fanny was born from a shared passion for Provençal cuisine, built on strong values of respect and generosity.</p>`},
+    {id:'d2',cat:'policy',icon:'📋',iconColor:'sky',title:'Code of Conduct & Policies',sub:'Team rules and expectations',isPDF:false,forRoles:null,content:`<h3>Code of Conduct</h3><p>We expect every team member to behave respectfully. Zero tolerance for harassment.</p>`},
+    {id:'d3',cat:'policy',icon:'🤝',iconColor:'green',title:'How We Act Here',sub:'Our way of being together',isPDF:false,forRoles:null,content:`<h3>The M&F spirit</h3><p>We work hard but take care of each other. Mutual respect is non-negotiable.</p>`},
+    {id:'d4',cat:'procedure',icon:'🔑',iconColor:'yellow',title:'Opening & Closing',sub:'Daily procedures',isPDF:false,forRoles:null,content:`<h3>Opening</h3><ul><li>Arrive 15 min early</li><li>Check temperatures</li></ul><h3>Closing</h3><ul><li>Clean all stations</li><li>Secure access</li></ul>`},
+    {id:'d5',cat:'training',icon:'👨‍🍳',iconColor:'green',title:'Kitchen Training',sub:'Kitchen basics',isPDF:false,forRoles:['Kitchen'],content:`<h3>Kitchen standards</h3><p>Mandatory handwashing every 30 min. Min 74°C for meats.</p>`},
+    {id:'d6',cat:'training',icon:'🥐',iconColor:'yellow',title:'Pastry Training',sub:'Techniques and recipes',isPDF:false,forRoles:['Pastry'],content:`<h3>Pastry at M&F</h3><p>Always follow recipe sheets exactly. Weigh all ingredients.</p>`},
+    {id:'d7',cat:'training',icon:'🛍️',iconColor:'black',title:'Sales & Customer Service',sub:'Customer service and cash',isPDF:false,forRoles:['Sales'],content:`<h3>Welcome at M&F</h3><p>A smile makes all the difference.</p>`},
+    {id:'d8',cat:'training',icon:'🥖',iconColor:'yellow',title:'Bakery Training',sub:'Breads and pastries',isPDF:false,forRoles:['Bakery'],content:`<h3>Bakery at M&F</h3><p>Homemade breads with local flours.</p>`},
+    {id:'d9',cat:'training',icon:'🍫',iconColor:'black',title:'Chocolate Training',sub:'Chocolate techniques',isPDF:false,forRoles:['Chocolate'],content:`<h3>Chocolate at M&F</h3><p>Precision and care in all chocolate work.</p>`},
+    {id:'d10',cat:'training',icon:'📦',iconColor:'sky',title:'Packaging Training',sub:'Procedures and standards',isPDF:false,forRoles:['Packaging'],content:`<h3>Packaging at M&F</h3><p>Presentation reflects our quality.</p>`},
+    {id:'d11',cat:'policy',icon:'⚠️',iconColor:'red',title:'Health & Safety',sub:'Prevention and emergencies',isPDF:false,forRoles:null,content:`<h3>Prevention</h3><ul><li>Report hazards immediately</li><li>Emergency: 911</li></ul>`},
+  ]
+};
+
+// ═══════════════════════════════════════════════════════
+// DEFAULT EMPLOYEES
+// ═══════════════════════════════════════════════════════
+const DEFAULT_EMPLOYEES = [
+  {id:'e1',passwordChanged:true,name:'Sophie Tremblay',role:'Cuisine',email:'sophie@mf.ca',password:'1234',joined:'2026-03-10',training:['Cuisine'],salary:[{date:'2024-01-15',amount:18.5,note:'Embauche'},{date:'2024-11-01',amount:19.5,note:'Révision annuelle'}],docs:{},attestations:{},warnings:[],evals:[],quizResults:null,notifications:{docs:0,salary:0,warnings:0,evals:0}},
+  {id:'e2',passwordChanged:true,name:'Marc Bouchard',role:'Pâtisserie',email:'marc@mf.ca',password:'1234',joined:'2025-04-10',training:['Pâtisserie'],salary:[{date:'2024-03-20',amount:20,note:'Embauche'},{date:'2025-03-20',amount:21.5,note:'Révision annuelle'}],docs:{d1:true,d2:true,d3:true,d4:true,d5:true,d6:true,d7:true,d8:true,d9:true,d10:true,d11:true},attestations:{d1:true,d2:true,d3:true,d4:true,d5:true,d6:true,d7:true,d8:true,d9:true,d10:true,d11:true},warnings:[{id:'w1',type:'oral',date:'2024-09-10',reason:'Retard répété',text:'Avertissement oral remis suite à 3 retards consécutifs.',signedBy:null,signedDate:null}],evals:[{id:'ev1',date:'2024-12-01',type:'self',role:'Pâtisserie',scores:{'0-0':4,'0-1':5,'0-2':4,'0-3':4,'0-4':3,'0-5':5,'1-0':5,'1-1':4,'1-2':4,'1-3':3,'1-4':4,'1-5':5},note:"Bon travail dans l'ensemble",annotation:null}],quizResults:{score:2,total:2,date:'2025-01-01'},notifications:{docs:0,salary:0,warnings:0,evals:0}},
+  {id:'e3',passwordChanged:true,name:'Julie Lavoie',role:'Vente',email:'julie@mf.ca',password:'1234',joined:'2025-10-10',training:['Vente'],salary:[{date:'2024-06-01',amount:17,note:'Embauche'}],docs:{d1:true},attestations:{},warnings:[],evals:[],quizResults:null,notifications:{docs:0,salary:0,warnings:0,evals:0}},
+];
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let customDocs = [];
+let customQuizzes = {}; // {role: [{q,opts,ans}]}
+
+function loadState() {
+  const saved = DB.load();
+  if (saved) {
+    if (saved.employees) state.employees = saved.employees;
+    if (saved.customDocs) customDocs = saved.customDocs;
+    if (saved.customQuizzes) customQuizzes = saved.customQuizzes;
+    if (saved.rolesFR) ROLES_FR = saved.rolesFR;
+    if (saved.rolesEN) ROLES_EN = saved.rolesEN;
+    if (saved.roleIcons) ROLE_ICONS = saved.roleIcons;
+    if (saved.managerPin) MANAGER_PIN = saved.managerPin;
+    // Sync T[lang].roles
+    T.fr.roles = ROLES_FR;
+    T.en.roles = ROLES_EN;
+  }
+}
+
+function saveState() {
+  DB.save({
+    employees: state.employees,
+    customDocs: customDocs,
+    customQuizzes: customQuizzes,
+    rolesFR: ROLES_FR,
+    rolesEN: ROLES_EN,
+    roleIcons: ROLE_ICONS,
+    managerPin: MANAGER_PIN
+  });
+}
+
+let state = {
+  lang: 'fr',
+  screen: 'auth', // auth | app
+  authMode: 'login',
+  isManager: false,
+  currentUser: null,
+  activePage: 'dashboard',
+  modal: null,
+  docModal: null,
+  newEvalScores: {},
+  pendingFile: null,
+  regTraining: [],
+  showPin: false,
+  showForgotModal: false,
+  showFirstLoginModal: false,
+  firstLoginEmpId: null,
+  pinValue: '',
+  pinError: '',
+  empFilter: 'all',
+  quizState: null, // {qIdx, answers, done}
+  employees: JSON.parse(JSON.stringify(DEFAULT_EMPLOYEES)),
+};
+
+// ═══════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════
+function t(k) { return T[state.lang][k] || k; }
+function allDocs() { return [...BUILTIN_DOCS[state.lang], ...customDocs]; }
+function getMyEmp() { return state.employees.find(e => e.name === state.currentUser?.name) || state.employees[0]; }
+function empDocs(emp) {
+  const tr = emp.training || [];
+  return allDocs().filter(d => !d.forRoles || d.forRoles.length === 0 || d.forRoles.some(r => tr.includes(r)));
+}
+function getEmpProgress(emp) {
+  const d = empDocs(emp);
+  const total = d.length;
+  const done = d.filter(doc => emp.attestations && emp.attestations[doc.id]).length;
+  return { done, total, pct: total > 0 ? Math.round(done / total * 100) : 0 };
+}
+function getEvalCriteria(role) {
+  const map = T[state.lang].evalCriteria;
+  return map[role] || map[Object.keys(map)[0]];
+}
+function getQuiz(role) {
+  if (customQuizzes[role] && customQuizzes[role].length > 0) return customQuizzes[role];
+  const qt = T[state.lang].quizTemplates;
+  return qt[role] || qt[Object.keys(qt)[0]];
+}
+function totalNotifications(emp) {
+  if (!emp.notifications) return 0;
+  return (emp.notifications.docs || 0) + (emp.notifications.salary || 0) + (emp.notifications.warnings || 0) + (emp.notifications.evals || 0);
+}
+
+function showNotif(msg) {
+  const n = document.getElementById('notif');
+  document.getElementById('notif-msg').textContent = msg;
+  n.classList.add('show');
+  const bar = document.getElementById('notif-bar');
+  bar.style.animation = 'none';
+  setTimeout(() => { bar.style.animation = 'shrink 3s linear forwards'; }, 10);
+  setTimeout(() => n.classList.remove('show'), 3000);
+}
+
+
+
+function renderFirstLoginModal() {
+  if (!state.showFirstLoginModal) return '';
+  return `<div class="pin-overlay">
+    <div class="pin-box" style="max-width:400px;text-align:left;">
+      <div style="text-align:center;margin-bottom:1rem;">
+        <div style="font-size:2.5rem;margin-bottom:0.5rem;">🔐</div>
+        <h2 style="color:var(--navy);">Bienvenue! Créez votre mot de passe</h2>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-top:6px;">Pour sécuriser votre compte, veuillez choisir un mot de passe personnel.</p>
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label style="font-size:0.75rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">Nouveau mot de passe</label>
+        <input id="fl-pwd-new" type="password" placeholder="Choisissez un mot de passe..."
+          style="width:100%;padding:10px 14px;border:2.5px solid var(--border-light);border-radius:12px;font-family:Nunito,sans-serif;font-size:0.95rem;font-weight:600;outline:none;color:var(--text-main);">
+      </div>
+      <div style="margin-bottom:1.5rem;">
+        <label style="font-size:0.75rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">Confirmer le mot de passe</label>
+        <input id="fl-pwd-confirm" type="password" placeholder="Confirmez votre mot de passe..."
+          style="width:100%;padding:10px 14px;border:2.5px solid var(--border-light);border-radius:12px;font-family:Nunito,sans-serif;font-size:0.95rem;font-weight:600;outline:none;color:var(--text-main);">
+      </div>
+      <div id="fl-error" style="color:var(--red);font-size:0.82rem;font-weight:800;min-height:1.2em;margin-bottom:0.75rem;"></div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-sec" style="flex:1;" onclick="skipFirstLogin()">Plus tard</button>
+        <button class="btn-sky" style="flex:2;" onclick="saveFirstLoginPassword('${state.firstLoginEmpId}')">✅ Confirmer</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function saveFirstLoginPassword(empId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const newPwd = document.getElementById('fl-pwd-new')?.value;
+  const confirm = document.getElementById('fl-pwd-confirm')?.value;
+  const errEl = document.getElementById('fl-error');
+  if (!newPwd || newPwd.length < 4) { if(errEl) errEl.textContent = 'Minimum 4 caractères.'; return; }
+  if (newPwd !== confirm) { if(errEl) errEl.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+  emp.password = newPwd;
+  emp.passwordChanged = true;
+  state.showFirstLoginModal = false;
+  state.firstLoginEmpId = null;
+  saveState();
+  render();
+  showNotif('🔐 Mot de passe créé avec succès!');
+}
+
+function skipFirstLogin() {
+  state.showFirstLoginModal = false;
+  state.firstLoginEmpId = null;
+  render();
+}
+
+function renderForgotModal() {
+  if (!state.showForgotModal) return '';
+  return `<div class="pin-overlay" onclick="state.showForgotModal=false;render()">
+    <div class="pin-box" onclick="event.stopPropagation()" style="max-width:360px;">
+      <div style="font-size:2rem;margin-bottom:0.5rem;">🔒</div>
+      <h2 style="margin-bottom:0.5rem;">${t('forgotTitle')}</h2>
+      <p style="margin-bottom:1.2rem;">${t('forgotMsg')}</p>
+      <div class="form-row full" style="margin-bottom:1rem;">
+        <div class="form-field">
+          <label>Votre courriel</label>
+          <input id="forgot-email" type="email" placeholder="votre@email.com" style="width:100%;padding:10px 14px;border:2.5px solid var(--border-light);border-radius:12px;font-family:Nunito,sans-serif;font-size:0.95rem;font-weight:600;outline:none;color:var(--text-main);">
+        </div>
+      </div>
+      <div style="font-size:0.82rem;color:var(--text-muted);font-weight:600;margin-bottom:1.2rem;background:var(--cream-pale);border-radius:12px;padding:10px 14px;border:2px solid var(--cream);">
+        📋 Un message sera envoyé à votre gestionnaire pour réinitialiser votre mot de passe.
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-sec" style="flex:1;" onclick="state.showForgotModal=false;render();">${t('cancel')}</button>
+        <button class="btn-sky" style="flex:2;" onclick="submitForgot()">📩 Envoyer la demande</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function submitForgot() {
+  const email = document.getElementById('forgot-email')?.value;
+  if (!email) { showNotif('Veuillez entrer votre courriel'); return; }
+  state.showForgotModal = false;
+  render();
+  showNotif('✅ Demande envoyée au gestionnaire!');
+}
+
+function render() {
+  document.getElementById('app').innerHTML = state.screen === 'auth' ? renderAuth() : renderApp();
+}
+
+// ═══════════════════════════════════════════════════════
+// PIN PAD
+// ═══════════════════════════════════════════════════════
+function renderPinPad() {
+  if (!state.showPin) return '';
+  const dots = [...Array(4)].map((_, i) =>
+    `<div class="pin-dot ${i < state.pinValue.length ? 'filled' : ''}"></div>`
+  ).join('');
+  return `<div class="pin-overlay">
+    <div class="pin-box">
+      <h2>🔐 ${t('pinTitle')}</h2>
+      <p>${t('pinSub')}</p>
+      <div class="pin-dots">${dots}</div>
+      <div class="pin-grid">
+        ${[1,2,3,4,5,6,7,8,9].map(n => `<button class="pin-btn" onclick="pinPress('${n}')">${n}</button>`).join('')}
+        <button class="pin-btn del" onclick="pinDel()">⌫</button>
+        <button class="pin-btn" onclick="pinPress('0')">0</button>
+        <button class="pin-btn cancel-btn" onclick="pinCancel()">✕ ${t('cancel')}</button>
+      </div>
+      <div class="pin-error">${state.pinError}</div>
+    </div>
+  </div>`;
+}
+
+function pinPress(n) {
+  if (state.pinValue.length >= 4) return;
+  state.pinValue += n;
+  state.pinError = '';
+  if (state.pinValue.length === 4) {
+    if (state.pinValue === MANAGER_PIN) {
+      state.showPin = false; state.pinValue = ''; state.pinError = '';
+      state.currentUser = { name: 'Gestionnaire', role: t('manager') };
+      state.isManager = true; state.screen = 'app'; state.activePage = 'dashboard';
+      render(); showNotif(t('welcome') + ', Gestionnaire! 🎉');
+    } else {
+      state.pinError = t('pinError');
+      setTimeout(() => { state.pinValue = ''; state.pinError = ''; render(); }, 900);
+      render();
+    }
+  } else render();
+}
+function pinDel() { if (state.pinValue.length > 0) { state.pinValue = state.pinValue.slice(0, -1); render(); } }
+function pinCancel() { state.showPin = false; state.pinValue = ''; state.pinError = ''; state.isManager = false; render(); }
+
+// ═══════════════════════════════════════════════════════
+// AUTH SCREEN
+// ═══════════════════════════════════════════════════════
+function renderAuth() {
+  return `<div class="auth-screen">
+    <div class="auth-logo">
+      <div style="font-family:'Fredoka One',cursive;font-size:2.4rem;color:var(--cream-light);letter-spacing:1px;line-height:1.1;">Marius & Fanny</div>
+      <div class="tagline">${t('tagline')}</div>
+    </div>
+    <div class="auth-card">
+      <div class="lang-toggle">
+        <button class="lang-btn ${state.lang==='fr'?'active':''}" onclick="setLang('fr')">🇫🇷 Français</button>
+        <button class="lang-btn ${state.lang==='en'?'active':''}" onclick="setLang('en')">🇬🇧 English</button>
+      </div>
+      <div class="role-tabs">
+        <div class="role-tab ${!state.isManager?'active':''}" onclick="selectEmployee()">${t('employee')}</div>
+        <div class="role-tab ${state.isManager?'active':''}" onclick="selectManager()">${t('manager')}</div>
+      </div>
+
+      <div class="field-group"><label>${t('email')}</label><input id="auth-email" type="email"></div>
+      <div class="field-group"><label>${t('password')}</label><input id="auth-pwd" type="password"></div>
+      <button class="btn-primary" onclick="doAuth()">${t('login')}</button>
+
+      ${state.authMode==='login' ? `<div class="forgot-link" onclick="showForgot()">🔒 ${t('forgotPwd')}</div>` : ''}
+    </div>
+  </div>${renderPinPad()}${renderForgotModal()}`;
+}
+
+function selectEmployee() { state.isManager = false; render(); }
+function selectManager() { state.showPin = true; state.pinValue = ''; state.pinError = ''; render(); }
+
+function showForgot() {
+  state.showForgotModal = true;
+  render();
+}
+
+// ═══════════════════════════════════════════════════════
+// APP SHELL
+// ═══════════════════════════════════════════════════════
+function renderApp() {
+  const emp = state.isManager ? null : getMyEmp();
+  const p = emp ? getEmpProgress(emp) : null;
+  const totalN = emp ? totalNotifications(emp) : 0;
+
+  const docN = emp?.notifications?.docs || 0;
+  const salN = emp?.notifications?.salary || 0;
+  const warnN = emp?.notifications?.warnings || 0;
+  const evalN = emp?.notifications?.evals || 0;
+
+  return `<div class="app">
+    <div class="sidebar">
+      <div class="sidebar-brand">
+        <div style="font-family:'Fredoka One',cursive;font-size:1.5rem;color:var(--cream-light);letter-spacing:0.5px;line-height:1.2;text-align:center;">Marius & Fanny</div>
+        <div class="sub">${t('tagline')}</div>
+      </div>
+      <div class="sidebar-user">
+        <div class="uname">${state.currentUser?.name || ''}</div>
+        <div class="urole">${state.currentUser?.role || t(state.isManager?'manager':'employee')}</div>
+        ${p ? `<div class="uprogress">✦ ${p.done}/${p.total} complétés</div>` : ''}
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Navigation</div>
+        <div class="nav-item ${state.activePage==='dashboard'?'active':''}" onclick="setPage('dashboard')"><span class="nav-icon">🏠</span>${t('dashboard')}</div>
+        ${state.isManager ? `
+          <div class="nav-item ${state.activePage==='employees'?'active':''}" onclick="setPage('employees')"><span class="nav-icon">👥</span>${t('employees')}</div>
+          <div class="nav-item ${state.activePage==='salaryOverview'?'active':''}" onclick="setPage('salaryOverview')"><span class="nav-icon">💰</span>Salaires</div>
+          <div class="nav-item ${state.activePage==='criteriaEditor'?'active':''}" onclick="setPage('criteriaEditor')"><span class="nav-icon">✏️</span>${t('criteria')}</div>
+          <div class="nav-item ${state.activePage==='quizEditor'?'active':''}" onclick="setPage('quizEditor')"><span class="nav-icon">🧩</span>${t('quizEditor')}</div>
+          <div class="nav-item ${state.activePage==='rolesEditor'?'active':''}" onclick="setPage('rolesEditor')"><span class="nav-icon">🏷️</span>Gérer les postes</div>
+          <div class="nav-item ${state.activePage==='changePin'?'active':''}" onclick="setPage('changePin')"><span class="nav-icon">🔐</span>Modifier le NIP</div>` : ''}
+        <div class="nav-item ${state.activePage==='docs'?'active':''}" onclick="setPage('docs');clearNotif('docs')">
+          <span class="nav-icon">📁</span>${state.isManager?t('allDocs'):t('myDocs')}
+          ${docN>0?`<span class="notif-badge">${docN}</span>`:''}
+        </div>
+        <div class="nav-item ${state.activePage==='evals'?'active':''}" onclick="setPage('evals');clearNotif('evals')">
+          <span class="nav-icon">📊</span>${t('evaluations')}
+          ${evalN>0?`<span class="notif-badge">${evalN}</span>`:''}
+        </div>
+        ${!state.isManager ? `
+          <div class="nav-item ${state.activePage==='salary'?'active':''}" onclick="setPage('salary');clearNotif('salary')">
+            <span class="nav-icon">💰</span>${t('salary')}
+            ${salN>0?`<span class="notif-badge">${salN}</span>`:''}
+          </div>
+          <div class="nav-item ${state.activePage==='changePassword'?'active':''}" onclick="setPage('changePassword')">
+            <span class="nav-icon">🔑</span>Changer mot de passe
+          </div>
+          <div class="nav-item ${state.activePage==='warnings'?'active':''}" onclick="setPage('warnings');clearNotif('warnings')">
+            <span class="nav-icon">⚠️</span>${t('warnings')}
+            ${warnN>0?`<span class="notif-badge">${warnN}</span>`:''}
+          </div>` : ''}
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Langue</div>
+        <div class="nav-item ${state.lang==='fr'?'active':''}" onclick="setLang('fr')"><span class="nav-icon">🇫🇷</span>Français</div>
+        <div class="nav-item ${state.lang==='en'?'active':''}" onclick="setLang('en')"><span class="nav-icon">🇬🇧</span>English</div>
+      </div>
+      <div class="sidebar-footer">
+        <button class="home-btn" onclick="setPage('dashboard')">🏠 ${t('home')}</button>
+        <button class="logout-btn" onclick="logout()">🚪 ${t('logout')}</button>
+      </div>
+    </div>
+    <div class="main">${renderPage()}</div>
+  </div>${renderModal()}${renderDocModal()}`;
+}
+
+function homeBtn() { return `<button class="page-home-btn" onclick="setPage('dashboard')">🏠 ${t('home')}</button>`; }
+
+function clearNotif(type) {
+  if (state.isManager) return;
+  const emp = getMyEmp();
+  if (emp && emp.notifications) { emp.notifications[type] = 0; saveState(); }
+}
+
+function renderPage() {
+  switch (state.activePage) {
+    case 'dashboard': return renderDashboard();
+    case 'employees': return renderEmployees();
+    case 'salaryOverview': return renderSalaryOverview();
+    case 'docs': return renderDocs();
+    case 'evals': return renderEvals();
+    case 'salary': return renderSalary();
+    case 'warnings': return renderWarnings();
+    case 'criteriaEditor': return renderCriteriaEditor();
+    case 'quizEditor': return renderQuizEditor();
+    case 'quiz': return renderQuiz();
+    case 'changePassword': return renderChangePassword();
+    case 'rolesEditor': return renderRolesEditor();
+    case 'changePin': return renderChangePin();
+    default: return renderDashboard();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════
+// ANNIVERSARY HELPERS
+// ═══════════════════════════════════════════════════════
+function getAnniversaryAlerts() {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const alerts = [];
+
+  // Window: show if milestone is within next 30 days OR passed within last 7 days
+  const AHEAD = 5;   // days ahead
+  const BEHIND = 7;  // days behind (just passed)
+
+  state.employees.forEach(emp => {
+    if (!emp.joined) return;
+    const joined = new Date(emp.joined);
+    joined.setHours(0,0,0,0);
+    const diffDays = Math.floor((today - joined) / (1000 * 60 * 60 * 24));
+    const diffYears = today.getFullYear() - joined.getFullYear();
+
+    // One-time milestones (only show if not yet reached + 30 days, or passed <7 days ago)
+    const milestones = [
+      { days: 30,   label: '1 mois',   icon: '🌱', urgency: 'green' },
+      { days: 90,   label: '3 mois',   icon: '⭐', urgency: 'sky' },
+      { days: 180,  label: '6 mois',   icon: '🌟', urgency: 'cream' },
+      { days: 365,  label: '1 an',     icon: '🏆', urgency: 'orange' },
+      { days: 1095, label: '3 ans 🎯 Réviser % vacances', icon: '🏖️', urgency: 'orange', vacationAlert: true },
+    ];
+
+    milestones.forEach(m => {
+      const delta = m.days - diffDays; // positive = coming up, negative = passed
+      if (delta >= 0 && delta <= AHEAD) {
+        // Coming up within 30 days
+        const text = delta === 0 ? "🎉 Aujourd'hui!" : `Dans ${delta} jour${delta>1?'s':''}`;
+        const urgent = delta <= 7;
+        alerts.push({ emp, label: m.label, icon: m.icon, urgency: m.urgency, text, urgent, sort: delta });
+      } else if (delta < 0 && delta >= -BEHIND) {
+        // Just passed within 7 days
+        const ago = Math.abs(delta);
+        const text = `Il y a ${ago} jour${ago>1?'s':''}`;
+        alerts.push({ emp, label: m.label, icon: m.icon, urgency: m.urgency, text, urgent: false, sort: 1000 + ago });
+      }
+    });
+
+    // Yearly anniversaries (1 year and beyond)
+    if (diffDays > 365) {
+      // Check anniversary this year
+      let thisYearAnniv = new Date(today.getFullYear(), joined.getMonth(), joined.getDate());
+      thisYearAnniv.setHours(0,0,0,0);
+      let deltaAnniv = Math.floor((thisYearAnniv - today) / (1000 * 60 * 60 * 24));
+
+      // If this year's anniv has passed more than BEHIND days ago, check next year
+      if (deltaAnniv < -BEHIND) {
+        thisYearAnniv = new Date(today.getFullYear() + 1, joined.getMonth(), joined.getDate());
+        deltaAnniv = Math.floor((thisYearAnniv - today) / (1000 * 60 * 60 * 24));
+      }
+
+      if (deltaAnniv >= -BEHIND && deltaAnniv <= AHEAD) {
+        const yearsCount = thisYearAnniv.getFullYear() - joined.getFullYear();
+        let text;
+        if (deltaAnniv === 0) text = "🎉 Aujourd'hui!";
+        else if (deltaAnniv > 0) text = `Dans ${deltaAnniv} jour${deltaAnniv>1?'s':''}`;
+        else { const ago = Math.abs(deltaAnniv); text = `Il y a ${ago} jour${ago>1?'s':''}`; }
+        const urgent = deltaAnniv >= 0 && deltaAnniv <= 7;
+        alerts.push({ emp, label: `${yearsCount} an${yearsCount>1?'s':''}`, icon: '🎉', urgency: 'orange', text, urgent, sort: deltaAnniv >= 0 ? deltaAnniv : 1000 + Math.abs(deltaAnniv) });
+      }
+    }
+  });
+
+  // Sort: most urgent first (closest upcoming date, then recently passed)
+  alerts.sort((a, b) => a.sort - b.sort);
+  return alerts;
+}
+
+
+function dismissAlert(empId, key) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  if (!emp.dismissedAlerts) emp.dismissedAlerts = [];
+  if (!emp.dismissedAlerts.includes(key)) emp.dismissedAlerts.push(key);
+  saveState(); render();
+}
+
+function renderDashboard() {
+  if (state.isManager) {
+    const totalDone = state.employees.filter(e => getEmpProgress(e).pct === 100).length;
+    const totalWarn = state.employees.reduce((a, e) => a + e.warnings.length, 0);
+    const pendingEvals = state.employees.filter(e => e.evals.length === 0).length;
+    return `<div class="page-header"><div><h1>👋 Bonjour!</h1><p>${t('brand')}</p></div></div>
+    <div class="stats-grid">
+      <div class="stat-card sky"><div class="stat-label">${t('totalEmp')}</div><div class="stat-value">${state.employees.length}</div></div>
+      <div class="stat-card cream"><div class="stat-label">Intégration complète</div><div class="stat-value">${totalDone}</div></div>
+      <div class="stat-card green"><div class="stat-label">${t('pendingEval')}</div><div class="stat-value">${pendingEvals}</div></div>
+      <div class="stat-card orange"><div class="stat-label">${t('warnings_count')}</div><div class="stat-value">${totalWarn}</div></div>
+    </div>
+    ${(function(){
+      const alerts = getAnniversaryAlerts();
+      if (alerts.length === 0) return '';
+      return `<div class="section-card" style="border-color:var(--cream);background:var(--cream-pale);margin-bottom:1rem;">
+        <h3 style="color:var(--navy);margin-bottom:0.75rem;">🗓 Anniversaires d'embauche</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${alerts.map(a => {
+            const borderCol = a.urgent ? 'var(--orange)' : 'var(--border-light)';
+            const bgCol = a.urgent ? 'var(--orange-light)' : 'var(--white)';
+            const labelBg = {green:'var(--green-light)',sky:'var(--sky-pale)',cream:'var(--cream-pale)',orange:'var(--orange-light)'}[a.urgency]||'var(--cream-pale)';
+            const labelColor = {green:'var(--green-dark)',sky:'var(--sky-deep)',cream:'var(--cream-dark)',orange:'var(--orange)'}[a.urgency]||'var(--navy)';
+            return `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:${bgCol};border-radius:12px;border:2px solid ${borderCol};">
+              <span style="font-size:1.4rem;">${a.icon}</span>
+              <div style="flex:1;">
+                <div style="font-weight:800;color:var(--navy);font-size:0.9rem;">${a.emp.name} ${a.urgent?'<span style="font-size:0.7rem;background:var(--orange);color:white;padding:2px 8px;border-radius:10px;margin-left:4px;">Urgent</span>':''}</div>
+                <div style="font-size:0.78rem;color:var(--text-muted);font-weight:600;">${ROLE_ICONS[a.emp.role]||''} ${a.emp.role} — Embauché le ${a.emp.joined}</div>
+              </div>
+              <div style="text-align:right;">
+                <span style="font-size:0.78rem;font-weight:800;padding:4px 12px;border-radius:20px;background:${labelBg};color:${labelColor};">${a.label}</span>
+                <div style="font-size:0.72rem;color:var(--text-muted);margin-top:3px;font-weight:700;">${a.text}</div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    })()}
+    <div class="section-card">
+      <h3>👥 ${t('employees')}</h3>
+      <table class="emp-table"><thead><tr><th>${t('name')}</th><th>Poste</th><th>${t('progress')}</th><th>Status</th></tr></thead>
+      <tbody>${state.employees.map(e => {
+        const p = getEmpProgress(e);
+        return `<tr onclick="openEmpFile('${e.id}')" style="cursor:pointer;">
+          <td><strong>${e.name}</strong></td>
+          <td><span class="chip">${ROLE_ICONS[e.role]||''} ${e.role}</span></td>
+          <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress-bar" style="width:90px;"><div class="progress-fill" style="width:${p.pct}%"></div></div><span style="font-size:0.78rem;color:var(--text-muted);font-weight:700;">${p.done}/${p.total}</span></div></td>
+          <td><span class="status-pill ${p.pct===100?'completed':p.done>0?'in-progress':'new-emp'}">${p.pct===100?t('completed'):p.done>0?t('inProgress'):t('newEmp')}</span></td>
+        </tr>`;
+      }).join('')}</tbody></table>
+    </div>`;
+  }
+
+  const emp = getMyEmp();
+  const p = getEmpProgress(emp);
+  const docList = empDocs(emp);
+  const remaining = docList.filter(d => !emp.attestations || !emp.attestations[d.id]);
+
+  // Show quiz if 100% complete and no quiz result yet
+  if (p.pct === 100 && !emp.quizResults) {
+    return `<div class="page-header"><div><h1>${t('hi')}, ${emp.name.split(' ')[0]}! 🎉</h1><p>${t('brand')}</p></div></div>
+    <div class="section-card" style="border-color:var(--cream);background:var(--cream-pale);">
+      <h3>🎓 ${t('quiz')}</h3>
+      <p style="margin-bottom:1rem;font-size:0.9rem;color:var(--navy);font-weight:700;">Félicitations! Vous avez complété tous vos documents. Veuillez maintenant répondre au quiz d'intégration.</p>
+      <button class="btn-sky" onclick="startQuiz()">${t('quiz')} →</button>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card sky"><div class="stat-label">${t('progress')}</div><div class="stat-value">${p.pct}%</div></div>
+      <div class="stat-card cream"><div class="stat-label">${t('documents_validated')}</div><div class="stat-value">${p.done}/${p.total}</div></div>
+    </div>`;
+  }
+
+  return `<div class="page-header"><div><h1>${t('hi')}, ${emp.name.split(' ')[0]}! 👋</h1><p>${t('brand')}</p></div></div>
+  <div class="stats-grid">
+    <div class="stat-card sky"><div class="stat-label">${t('progress')}</div><div class="stat-value">${p.pct}%</div></div>
+    <div class="stat-card cream"><div class="stat-label">${t('documents_validated')}</div><div class="stat-value">${p.done}/${p.total}</div></div>
+    <div class="stat-card orange"><div class="stat-label">${t('warnings')}</div><div class="stat-value">${emp.warnings.length}</div></div>
+    <div class="stat-card green"><div class="stat-label">${t('evaluations')}</div><div class="stat-value">${emp.evals.length}</div></div>
+  </div>
+  ${emp.quizResults ? `<div class="section-card" style="border-color:var(--green);background:var(--green-light);margin-bottom:1rem;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span style="font-size:2rem;">🏆</span>
+      <div><strong style="color:var(--green-dark);">Quiz complété!</strong><br><span style="font-size:0.85rem;color:var(--green-dark);">${emp.quizResults.score}/${emp.quizResults.total} bonnes réponses — ${emp.quizResults.date}</span></div>
+    </div>
+  </div>` : ''}
+  <div class="section-card">
+    <h3>📋 ${t('integrationDocs')}</h3>
+    <div style="margin-bottom:1rem;"><div class="progress-bar"><div class="progress-fill" style="width:${p.pct}%"></div></div>
+    <div style="text-align:right;font-size:0.8rem;color:var(--text-muted);margin-top:6px;font-weight:700;">${p.done} / ${p.total} attestés</div></div>
+    <div class="doc-list">${docList.slice(0, 5).map(doc => {
+      const att = emp.attestations && emp.attestations[doc.id];
+      return `<div class="doc-item" onclick="openDoc('${doc.id}')">
+        <div class="doc-icon ${doc.iconColor}">${doc.isPDF?'📄':doc.icon}</div>
+        <div class="doc-info"><div class="doc-title">${doc.title}</div><div class="doc-sub">${doc.sub||t('pdfDoc')}</div></div>
+        <div class="doc-check ${att?'checked':''}">${att?'✓':''}</div>
+      </div>`;
+    }).join('')}</div>
+    ${remaining.length > 0
+      ? `<div style="margin-top:1rem;text-align:center;"><button class="btn-sky" onclick="setPage('docs')">${t('myDocs')} (${remaining.length} restant${remaining.length>1?'s':''})</button></div>`
+      : `<div style="margin-top:1rem;padding:14px;background:var(--green-light);border-radius:14px;text-align:center;color:var(--green-dark);font-weight:800;border:2px solid var(--green);">${t('allCompleted')}</div>`}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// EMPLOYEES PAGE
+// ═══════════════════════════════════════════════════════
+function renderEmployees() {
+  const roles = ['all', ...new Set(state.employees.map(e => e.role))];
+  const filtered = state.empFilter === 'all' ? state.employees : state.employees.filter(e => e.role === state.empFilter);
+
+  return `<div class="page-header"><div><h1>👥 ${t('employees')}</h1></div>
+    <div style="display:flex;gap:10px;">${homeBtn()}<button class="btn-cream" onclick="openAddEmp()">${t('addEmployee')}</button></div></div>
+  <div class="filter-bar">
+    ${roles.map(r => `<button class="filter-chip ${state.empFilter===r?'active':''}" onclick="setEmpFilter('${r}')">${r==='all'?t('filterAll'):(ROLE_ICONS[r]||'')+ ' '+r}</button>`).join('')}
+  </div>
+  <div class="section-card">
+    <table class="emp-table"><thead><tr><th>${t('name')}</th><th>Poste</th><th>Embauche</th><th>Salaire</th><th>${t('progress')}</th><th></th></tr></thead>
+    <tbody>${filtered.map(e => {
+      const p = getEmpProgress(e);
+      const sal = e.salary[e.salary.length - 1];
+      return `<tr>
+        <td><strong>${e.name}</strong><br><span style="font-size:0.75rem;color:var(--text-muted);">${e.email}</span></td>
+        <td><span class="chip">${ROLE_ICONS[e.role]||''} ${e.role}</span></td>
+        <td style="font-size:0.82rem;color:var(--text-muted);">${e.joined}</td>
+        <td><strong style="color:var(--sky-dark);">${sal.amount}${t('per_hour')}</strong></td>
+        <td><div class="progress-bar" style="width:80px;"><div class="progress-fill" style="width:${p.pct}%"></div></div><span style="font-size:0.72rem;color:var(--text-muted);font-weight:700;">${p.pct}%</span></td>
+        <td style="display:flex;gap:6px;">
+          <button class="btn-sky" style="font-size:0.78rem;padding:6px 12px;" onclick="openEmpFile('${e.id}')">${t('viewFile')}</button>
+          <button class="btn-danger" style="font-size:0.78rem;padding:6px 10px;" onclick="deleteEmployee('${e.id}')">🗑</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody></table>
+  </div>`;
+}
+
+function setEmpFilter(r) { state.empFilter = r; render(); }
+
+function deleteEmployee(id) {
+  if (!confirm(t('confirmDelete'))) return;
+  state.employees = state.employees.filter(e => e.id !== id);
+  saveState(); showNotif('Employé supprimé'); render();
+}
+
+// ═══════════════════════════════════════════════════════
+// SALARY OVERVIEW
+// ═══════════════════════════════════════════════════════
+function renderSalaryOverview() {
+  const rows = state.employees.map(e => {
+    const sal = e.salary;
+    const current = sal[sal.length - 1];
+    const increases = sal.length - 1;
+    const diff = increases > 0 ? (current.amount - sal[sal.length - 2].amount).toFixed(2) : null;
+    return { ...e, current, increases, diff };
+  });
+  const avg = (rows.reduce((a, e) => a + e.current.amount, 0) / rows.length).toFixed(2);
+
+  return `<div class="page-header"><div><h1>💰 ${t('salaryOverview')}</h1></div>${homeBtn()}</div>
+  <div class="stats-grid">
+    <div class="stat-card sky"><div class="stat-label">Masse salariale</div><div class="stat-value" style="font-size:1.4rem;">${rows.reduce((a,e)=>a+e.current.amount,0).toFixed(2)}${t('per_hour')}</div></div>
+    <div class="stat-card cream"><div class="stat-label">Salaire moyen</div><div class="stat-value" style="font-size:1.4rem;">${avg}${t('per_hour')}</div></div>
+    <div class="stat-card green"><div class="stat-label">Employés</div><div class="stat-value">${state.employees.length}</div></div>
+  </div>
+  <div class="section-card"><h3>📊 Tableau complet</h3>
+    <div style="overflow-x:auto;"><table class="salary-table">
+      <thead><tr><th>Nom</th><th>Poste</th><th>${t('hireDate')}</th><th>Salaire actuel</th><th>Dernière augm.</th><th>+/-</th><th>${t('increases')}</th><th></th></tr></thead>
+      <tbody>${rows.map(e => `<tr>
+        <td><strong>${e.name}</strong></td>
+        <td><span class="chip">${ROLE_ICONS[e.role]||''} ${e.role}</span></td>
+        <td style="color:var(--text-muted);font-size:0.82rem;">${e.joined}</td>
+        <td><strong style="color:var(--sky-dark);">${e.current.amount}${t('per_hour')}</strong></td>
+        <td style="font-size:0.82rem;">${e.increases>0?e.salary[e.salary.length-1].date:t('noIncrease')}</td>
+        <td>${e.diff?`<span class="salary-increase">+${e.diff}${t('per_hour')}</span>`:'—'}</td>
+        <td style="text-align:center;">${e.increases}</td>
+        <td><button class="btn-sec" style="font-size:0.78rem;padding:5px 12px;" onclick="openSalaryEdit('${e.id}')">+ Augm.</button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+  </div>
+  <div class="section-card"><h3>📈 Historique détaillé</h3>
+    ${state.employees.map(e => `<div style="margin-bottom:1.5rem;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:0.75rem;">
+        <strong>${e.name}</strong><span class="chip">${e.role}</span><span class="chip green">${e.salary[e.salary.length-1].amount}${t('per_hour')}</span>
+      </div>
+      <div class="timeline">${[...e.salary].reverse().map(s => `<div class="timeline-item">
+        <div class="tl-date">${s.date}</div>
+        ${s.type==='benefit'
+          ? `<div class="tl-val" style="color:var(--green-dark);">🎁 ${s.benefit}</div><div class="tl-note">Avantage${s.note?' — '+s.note:''}</div>`
+          : `<div class="tl-val">${s.amount}${t('per_hour')}</div><div class="tl-note">${s.note}</div>`}
+      </div>`).join('')}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// DOCUMENTS
+// ═══════════════════════════════════════════════════════
+function renderDocs() {
+  const emp = state.isManager ? null : getMyEmp();
+  const docList = emp ? empDocs(emp) : allDocs();
+  const cats = [...new Set(docList.map(d => d.cat))];
+  const catLabels = { history:t('section_history'), policy:t('section_policy'), training:t('section_training'), procedure:t('section_procedures'), custom:t('section_custom') };
+
+  return `<div class="page-header"><div><h1>📁 ${state.isManager?t('allDocs'):t('myDocs')}</h1></div>
+    <div style="display:flex;gap:10px;">${homeBtn()}${state.isManager?`<button class="btn-cream" onclick="openNewDoc()">${t('newDoc')}</button>`:''}</div></div>
+  ${cats.map(cat => `<div class="section-card">
+    <div class="cat-header"><h3>${catLabels[cat]||cat}</h3><span class="cat-badge">${docList.filter(d=>d.cat===cat).length} doc${docList.filter(d=>d.cat===cat).length>1?'s':''}</span></div>
+    <div class="doc-list">${docList.filter(d => d.cat === cat).map(doc => {
+      const att = emp && emp.attestations && emp.attestations[doc.id];
+      return `<div class="doc-item" onclick="openDoc('${doc.id}')">
+        <div class="doc-icon ${doc.iconColor}">${doc.isPDF?'📄':doc.icon}</div>
+        <div class="doc-info">
+          <div class="doc-title">${doc.title}${doc.isNew?`<span class="new-doc-badge"></span>`:''}${doc.isPDF?` <span style="font-size:0.7rem;background:var(--red-light);color:var(--red);padding:2px 7px;border-radius:6px;margin-left:4px;font-weight:800;">PDF</span>`:''}</div>
+          <div class="doc-sub">${doc.isPDF?`${t('uploadedBy')} ${doc.addedBy||'Gestionnaire'}`:doc.sub}</div>
+        </div>
+        ${!state.isManager&&emp?`<div class="doc-check ${att?'checked':''}">${att?'✓':''}</div>`:''}
+        ${state.isManager&&doc.cat==='custom'?`<button onclick="event.stopPropagation();deleteDoc('${doc.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.9rem;font-weight:800;padding:4px 8px;">✕</button>`:''}
+      </div>`;
+    }).join('')}</div>
+  </div>`).join('')}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// EVALUATIONS
+// ═══════════════════════════════════════════════════════
+function renderEvals() {
+  const emp = state.isManager ? null : getMyEmp();
+
+  if (!state.isManager && emp) {
+    return `<div class="page-header"><div><h1>📊 ${t('evaluations')}</h1></div>
+      <div style="display:flex;gap:10px;">${homeBtn()}<button class="btn-sky" onclick="openSelfEval()">${t('selfEval')}</button></div></div>
+    ${emp.evals.length === 0
+      ? `<div class="section-card"><p style="color:var(--text-muted);text-align:center;padding:2rem;font-weight:700;">Aucune évaluation pour l'instant.</p></div>`
+      : emp.evals.map(ev => {
+          const crit = getEvalCriteria(ev.role || emp.role);
+          return `<div class="section-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+              <h3>${ev.type==='self'?t('selfEval'):t('managerEval')}</h3>
+              <span style="font-size:0.82rem;color:var(--text-muted);font-weight:700;">${ev.date}</span>
+            </div>
+            ${crit.map((section, si) => `<div class="eval-section-label">${section.cat}</div>
+              ${section.items.map((item, ii) => `<div class="eval-row">
+                <div class="eval-label">${item}</div>
+                <div style="display:flex;gap:4px;">${[1,2,3,4,5].map(s =>
+                  `<div class="score-dot readonly ${(ev.scores[si+'-'+ii]||0)>=s?'active':''}">${s}</div>`
+                ).join('')}</div>
+              </div>`).join('')}`).join('')}
+            ${ev.note ? `<div style="margin-top:1rem;padding:12px;background:var(--sky-pale);border-radius:12px;font-size:0.88rem;font-weight:600;">${ev.note}</div>` : ''}
+            ${ev.annotation ? `<div class="annotation-box"><div class="ann-label">💬 ${t('annotation')}</div><div class="ann-text">${ev.annotation}</div></div>` : ''}
+          </div>`;
+        }).join('')}`;
+  }
+
+  // Manager view — no separate eval, just annotations on self-evals
+  return `<div class="page-header"><div><h1>📊 ${t('evaluations')}</h1></div>${homeBtn()}</div>
+  ${state.employees.map(e => `<div class="section-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div><h3>${e.name}</h3><span class="chip">${ROLE_ICONS[e.role]||''} ${e.role}</span></div>
+    </div>
+    ${e.evals.length === 0
+      ? `<div style="font-size:0.85rem;color:var(--text-muted);margin-top:8px;font-weight:700;">Aucune auto-évaluation reçue</div>`
+      : e.evals.map((ev, evIdx) => {
+          const crit = getEvalCriteria(ev.role || e.role);
+          const allS = crit.flatMap((s, si) => s.items.map((_, ii) => ev.scores[si+'-'+ii] || 0));
+          const avg = allS.length ? (allS.reduce((a, b) => a + b, 0) / allS.length).toFixed(1) : '-';
+          return `<div style="margin-top:1rem;padding:14px;background:var(--sky-pale);border-radius:14px;border:1.5px solid var(--border-light);">
+            <div style="display:flex;justify-content:space-between;font-size:0.82rem;font-weight:800;color:var(--text-muted);margin-bottom:8px;">
+              <span>${t('selfEval')} — ${ev.date}</span>
+              <span style="color:var(--sky-deep);">Moy: ${avg}/5</span>
+            </div>
+            ${crit.map((section, si) => `<div style="font-size:0.75rem;font-weight:800;color:var(--sky-deep);margin:6px 0 4px;">${section.cat}</div>
+              ${section.items.map((item, ii) => `<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:2px 0;font-weight:600;"><span>${item}</span><strong>${ev.scores[si+'-'+ii]||'—'}/5</strong></div>`).join('')}`).join('')}
+            ${ev.note ? `<div style="margin-top:8px;font-size:0.82rem;font-style:italic;color:var(--text-muted);">${ev.note}</div>` : ''}
+            ${ev.annotation
+              ? `<div class="annotation-box"><div class="ann-label">💬 ${t('annotation')}</div><div class="ann-text">${ev.annotation}</div><button class="btn-sec" style="margin-top:8px;font-size:0.78rem;" onclick="openAnnotate('${e.id}','${ev.id}')">✏️ Modifier</button></div>`
+              : `<button class="btn-sky" style="margin-top:10px;font-size:0.82rem;" onclick="openAnnotate('${e.id}','${ev.id}')">💬 ${t('annotate')}</button>`}
+          </div>`;
+        }).join('')}
+  </div>`).join('')}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// SALARY (employee)
+// ═══════════════════════════════════════════════════════
+function renderSalary() {
+  const emp = getMyEmp();
+  const salEntries = emp.salary.filter(s => s.type !== 'benefit' && s.amount != null);
+  const current = salEntries.length > 0 ? salEntries[salEntries.length-1] : emp.salary[emp.salary.length-1];
+  return `<div class="page-header"><div><h1>💰 ${t('salary')}</h1></div>${homeBtn()}</div>
+  <div class="section-card">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:1.5rem;">
+      <span style="font-size:2.2rem;font-weight:900;color:var(--sky-dark);">${current.amount}${t('per_hour')}</span>
+      <span style="font-size:0.88rem;color:var(--text-muted);font-weight:700;">salaire actuel</span>
+    </div>
+    <h3 style="margin-bottom:1rem;">${t('salaryHistory')}</h3>
+    <div class="timeline">${[...emp.salary].reverse().map(s =>
+      `<div class="timeline-item" style="${s.type==='benefit'?'--dot-color:var(--green)':''}">
+            <div class="tl-date">${s.date}</div>
+            ${s.type==='benefit'
+              ? `<div class="tl-val" style="color:var(--green-dark);">🎁 ${s.benefit}</div><div class="tl-note">Avantage${s.note?' — '+s.note:''}</div>`
+              : `<div class="tl-val">${s.amount}${t('per_hour')}</div><div class="tl-note">${s.note}</div>`}
+          </div>`
+    ).join('')}</div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// WARNINGS (employee)
+// ═══════════════════════════════════════════════════════
+function renderWarnings() {
+  const emp = getMyEmp();
+  return `<div class="page-header"><div><h1>⚠️ ${t('warnings')}</h1></div>${homeBtn()}</div>
+  ${emp.warnings.length === 0
+    ? `<div class="section-card"><p style="text-align:center;color:var(--text-muted);padding:2rem;font-weight:700;">✅ Aucun avertissement dans votre dossier.</p></div>`
+    : emp.warnings.map(w => `<div class="section-card">
+        <div style="display:flex;justify-content:space-between;margin-bottom:0.75rem;">
+          <span class="warn-badge ${w.type}">${w.type==='oral'?t('oral_warning'):t('written_warning')}</span>
+          <span style="font-size:0.82rem;color:var(--text-muted);font-weight:700;">${w.date}</span>
+        </div>
+        <div style="font-size:0.9rem;font-weight:600;margin-bottom:0.75rem;">${w.text}</div>
+        ${w.signedBy
+          ? `<div class="warn-signature-box"><div class="warn-sig-done">✔ ${t('warnSignDone')} <strong>${w.signedBy}</strong> — ${w.signedDate}</div></div>`
+          : `<div class="warn-signature-box">
+              <p>${t('warnSignText')}</p>
+              <input id="warn-sign-${w.id}" type="text" placeholder="Votre nom complet..." style="width:100%;padding:9px 12px;border:2.5px solid var(--red);border-radius:12px;font-family:Nunito,sans-serif;font-size:0.9rem;font-weight:600;outline:none;margin-bottom:8px;">
+              <button class="btn-danger" onclick="signWarning('${emp.id}','${w.id}')">✍ Signer</button>
+            </div>`}
+      </div>`).join('')}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// CRITERIA EDITOR
+// ═══════════════════════════════════════════════════════
+function renderCriteriaEditor() {
+  const roles = t('roles');
+  return `<div class="page-header"><div><h1>✏️ ${t('editCriteria')}</h1></div>${homeBtn()}</div>
+  ${roles.map(role => {
+    const crit = getEvalCriteria(role);
+    return `<div class="section-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
+        <span style="font-size:1.4rem;">${ROLE_ICONS[role]||'👤'}</span><h3>${role}</h3>
+        <span class="chip">${crit.reduce((a,s)=>a+s.items.length,0)} critères</span>
+      </div>
+      ${crit.map((section, si) => `<div style="margin-bottom:1rem;padding:14px;background:var(--sky-pale);border-radius:14px;border:2px solid var(--border-light);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <input value="${section.cat}" oninput="updateSectionName('${role}',${si},this.value)"
+            style="flex:1;padding:7px 12px;border:2.5px solid var(--sky);border-radius:10px;font-family:Nunito,sans-serif;font-size:0.9rem;font-weight:800;background:var(--cream-pale);outline:none;color:var(--navy);">
+          <button onclick="removeSection('${role}',${si})" style="padding:6px 12px;background:var(--red-light);border:2px solid var(--red);border-radius:8px;color:var(--red);cursor:pointer;font-weight:800;font-size:0.8rem;font-family:Nunito,sans-serif;">✕</button>
+        </div>
+        ${section.items.map((item, ii) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="color:var(--text-muted);font-size:14px;">⋮⋮</span>
+          <input value="${item}" oninput="updateCriterion('${role}',${si},${ii},this.value)"
+            style="flex:1;padding:7px 12px;border:2px solid var(--border-light);border-radius:10px;font-family:Nunito,sans-serif;font-size:0.88rem;font-weight:600;outline:none;color:var(--text-main);">
+          <button onclick="removeCriterion('${role}',${si},${ii})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;font-weight:800;">✕</button>
+        </div>`).join('')}
+        <button onclick="addCriterion('${role}',${si})" style="margin-top:6px;padding:7px 14px;border:2px dashed var(--sky);border-radius:10px;background:transparent;cursor:pointer;font-family:Nunito,sans-serif;font-size:0.82rem;font-weight:700;color:var(--sky-deep);">+ Ajouter un critère</button>
+      </div>`).join('')}
+      <button onclick="addSection('${role}')" style="width:100%;padding:10px;border:2.5px dashed var(--sky-deep);border-radius:12px;background:transparent;cursor:pointer;font-family:Nunito,sans-serif;font-size:0.85rem;font-weight:700;color:var(--sky-deep);">+ Ajouter une section</button>
+    </div>`;
+  }).join('')}`;
+}
+
+function updateSectionName(role, si, val) { const c = T[state.lang].evalCriteria[role]; if(c&&c[si]) c[si].cat=val; }
+function updateCriterion(role, si, ii, val) { const c = T[state.lang].evalCriteria[role]; if(c&&c[si]) c[si].items[ii]=val; }
+function addSection(role) { const c = T[state.lang].evalCriteria[role]; if(c) c.push({cat:'Nouvelle section',items:['Nouveau critère']}); setPage('criteriaEditor'); showNotif('Section ajoutée!'); }
+function removeSection(role, si) { const c = T[state.lang].evalCriteria[role]; if(c&&c.length>1){c.splice(si,1);setPage('criteriaEditor');}else showNotif('Au moins une section requise.'); }
+function addCriterion(role, si) { const c = T[state.lang].evalCriteria[role]; if(c&&c[si]) c[si].items.push('Nouveau critère'); setPage('criteriaEditor'); }
+function removeCriterion(role, si, ii) { const c = T[state.lang].evalCriteria[role]; if(c&&c[si]&&c[si].items.length>1){c[si].items.splice(ii,1);setPage('criteriaEditor');}else showNotif('Au moins un critère requis.'); }
+
+// ═══════════════════════════════════════════════════════
+// QUIZ EDITOR
+// ═══════════════════════════════════════════════════════
+
+
+
+function renderChangePin() {
+  return `<div class="page-header">
+    <div><h1>🔐 Modifier le NIP gestionnaire</h1><p>Changez régulièrement votre NIP pour plus de sécurité</p></div>
+    ${homeBtn()}
+  </div>
+  <div class="section-card" style="max-width:420px;">
+    <div style="background:var(--cream-pale);border:2px solid var(--cream);border-radius:14px;padding:1rem;margin-bottom:1.5rem;">
+      <p style="font-size:0.88rem;font-weight:700;color:var(--navy);">🔒 Le NIP doit être composé de 4 chiffres. Assurez-vous de le mémoriser — il vous sera demandé à chaque connexion gestionnaire.</p>
+    </div>
+    <div class="form-row full" style="margin-bottom:1rem;">
+      <div class="form-field">
+        <label>NIP actuel</label>
+        <input id="pin-current" type="password" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-size:1.2rem;text-align:center;">
+      </div>
+    </div>
+    <div class="form-row full" style="margin-bottom:1rem;">
+      <div class="form-field">
+        <label>Nouveau NIP (4 chiffres)</label>
+        <input id="pin-new" type="password" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-size:1.2rem;text-align:center;">
+      </div>
+    </div>
+    <div class="form-row full" style="margin-bottom:1.5rem;">
+      <div class="form-field">
+        <label>Confirmer le nouveau NIP</label>
+        <input id="pin-confirm" type="password" maxlength="4" placeholder="••••" style="letter-spacing:6px;font-size:1.2rem;text-align:center;">
+      </div>
+    </div>
+    <button class="btn-sky" onclick="saveNewPin()">🔐 Enregistrer le nouveau NIP</button>
+  </div>`;
+}
+
+function saveNewPin() {
+  const current = document.getElementById('pin-current').value;
+  const newPin  = document.getElementById('pin-new').value;
+  const confirm = document.getElementById('pin-confirm').value;
+  if (current !== MANAGER_PIN) { showNotif('❌ NIP actuel incorrect'); return; }
+  if (!/^[0-9]{4}$/.test(newPin)) { showNotif('Le NIP doit être exactement 4 chiffres'); return; }
+  if (newPin !== confirm) { showNotif('❌ Les NIP ne correspondent pas'); return; }
+  MANAGER_PIN = newPin;
+  saveState();
+  showNotif('✅ NIP modifié avec succès!');
+  setPage('dashboard');
+}
+
+function renderRolesEditor() {
+  return `<div class="page-header">
+    <div><h1>🏷️ Gérer les postes</h1><p>Ajouter, modifier ou supprimer les postes disponibles</p></div>
+    ${homeBtn()}
+  </div>
+  <div class="section-card">
+    <h3>Postes actuels</h3>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:1.5rem;">
+      ${ROLES_FR.map((role, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--sky-pale);border-radius:14px;border:2px solid var(--border-light);">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;gap:8px;">
+            <input value="${ROLE_ICONS[role]||'👤'}" oninput="updateRoleIcon(${i},this.value)"
+              style="width:52px;padding:7px;border:2px solid var(--border-light);border-radius:10px;font-family:Nunito,sans-serif;font-size:1.1rem;text-align:center;outline:none;" title="Emoji du poste">
+            <input value="${role}" oninput="updateRoleName('fr',${i},this.value)"
+              style="flex:1;min-width:120px;padding:7px 12px;border:2px solid var(--sky);border-radius:10px;font-family:Nunito,sans-serif;font-size:0.9rem;font-weight:800;outline:none;color:var(--navy);background:var(--cream-pale);" placeholder="Nom FR">
+            <input value="${ROLES_EN[i]||''}" oninput="updateRoleName('en',${i},this.value)"
+              style="flex:1;min-width:120px;padding:7px 12px;border:2px solid var(--border-light);border-radius:10px;font-family:Nunito,sans-serif;font-size:0.9rem;font-weight:600;outline:none;color:var(--text-main);" placeholder="Nom EN">
+          </div>
+          <span style="font-size:0.72rem;color:var(--text-muted);font-weight:700;white-space:nowrap;">${state.employees.filter(e=>e.role===role).length} emp.</span>
+          ${ROLES_FR.length > 1 ? `<button onclick="deleteRole(${i})" style="background:var(--red-light);border:2px solid var(--red);border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--red);font-weight:800;font-size:0.82rem;font-family:Nunito,sans-serif;" title="Supprimer ce poste">✕</button>` : ''}
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:10px;align-items:flex-end;padding:14px;background:var(--green-light);border-radius:14px;border:2px solid var(--green);">
+      <div style="flex:0 0 52px;">
+        <label style="font-size:0.72rem;font-weight:800;color:var(--green-dark);display:block;margin-bottom:4px;">Emoji</label>
+        <input id="new-role-icon" value="👤" style="width:52px;padding:7px;border:2px solid var(--green);border-radius:10px;font-family:Nunito,sans-serif;font-size:1.1rem;text-align:center;outline:none;">
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:0.72rem;font-weight:800;color:var(--green-dark);display:block;margin-bottom:4px;">Nom (français)</label>
+        <input id="new-role-fr" type="text" placeholder="Ex: Traiteur" style="width:100%;padding:9px 12px;border:2px solid var(--green);border-radius:10px;font-family:Nunito,sans-serif;font-size:0.9rem;font-weight:700;outline:none;color:var(--text-main);">
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:0.72rem;font-weight:800;color:var(--green-dark);display:block;margin-bottom:4px;">Nom (anglais)</label>
+        <input id="new-role-en" type="text" placeholder="Ex: Caterer" style="width:100%;padding:9px 12px;border:2px solid var(--green);border-radius:10px;font-family:Nunito,sans-serif;font-size:0.9rem;font-weight:700;outline:none;color:var(--text-main);">
+      </div>
+      <button class="btn-green" onclick="addRole()" style="white-space:nowrap;">+ Ajouter</button>
+    </div>
+    <p style="font-size:0.78rem;color:var(--text-muted);margin-top:0.75rem;font-weight:600;">💡 Les modifications sont appliquées partout (sélections, filtres, quiz, critères d'évaluation, documents). Les noms EN sont optionnels.</p>
+  </div>`;
+}
+
+function updateRoleName(lang, i, val) {
+  if (lang === 'fr') {
+    const old = ROLES_FR[i];
+    ROLES_FR[i] = val;
+    T.fr.roles = ROLES_FR;
+    // Update ROLE_ICONS key if name changed
+    if (old !== val) { ROLE_ICONS[val] = ROLE_ICONS[old]; }
+    // Update employees with old role
+    state.employees.forEach(e => { if(e.role===old) e.role=val; if(e.training) e.training=e.training.map(t=>t===old?val:t); });
+  } else {
+    ROLES_EN[i] = val;
+    T.en.roles = ROLES_EN;
+  }
+}
+
+function updateRoleIcon(i, val) {
+  const role = ROLES_FR[i];
+  ROLE_ICONS[role] = val;
+  if (ROLES_EN[i]) ROLE_ICONS[ROLES_EN[i]] = val;
+}
+
+function addRole() {
+  const fr = document.getElementById('new-role-fr').value.trim();
+  const en = document.getElementById('new-role-en').value.trim();
+  const icon = document.getElementById('new-role-icon').value.trim() || '👤';
+  if (!fr) { showNotif('Nom français requis'); return; }
+  if (ROLES_FR.includes(fr)) { showNotif('Ce poste existe déjà'); return; }
+  ROLES_FR.push(fr);
+  ROLES_EN.push(en || fr);
+  ROLE_ICONS[fr] = icon;
+  if (en) ROLE_ICONS[en] = icon;
+  T.fr.roles = ROLES_FR;
+  T.en.roles = ROLES_EN;
+  // Add default eval criteria
+  T.fr.evalCriteria[fr] = [{cat:'Compétences techniques',items:['Qualité du travail','Respect des procédures','Organisation']},{cat:'Comportement professionnel',items:['Ponctualité','Esprit d\'équipe','Attitude générale']}];
+  T.en.evalCriteria[en||fr] = [{cat:'Technical skills',items:['Work quality','Procedure compliance','Organization']},{cat:'Professional behaviour',items:['Punctuality','Teamwork','General attitude']}];
+  saveState();
+  showNotif('✅ Poste ajouté!');
+  setPage('rolesEditor');
+}
+
+function deleteRole(i) {
+  const role = ROLES_FR[i];
+  const count = state.employees.filter(e => e.role === role).length;
+  if (count > 0) { showNotif(`❌ Impossible: ${count} employé(s) ont ce poste`); return; }
+  if (!confirm("Supprimer le poste \"" + role + "\"?")) return;
+  ROLES_FR.splice(i, 1);
+  ROLES_EN.splice(i, 1);
+  delete ROLE_ICONS[role];
+  T.fr.roles = ROLES_FR;
+  T.en.roles = ROLES_EN;
+  saveState();
+  showNotif('Poste supprimé');
+  setPage('rolesEditor');
+}
+
+function renderChangePassword() {
+  const emp = getMyEmp();
+  return `<div class="page-header"><div><h1>🔑 Changer le mot de passe</h1><p>Mettez à jour votre mot de passe de connexion</p></div>${homeBtn()}</div>
+  <div class="section-card" style="max-width:440px;">
+    <div class="form-row full" style="margin-bottom:1rem;">
+      <div class="form-field">
+        <label>Mot de passe actuel</label>
+        <input id="pwd-current" type="password" placeholder="Votre mot de passe actuel">
+      </div>
+    </div>
+    <div class="form-row full" style="margin-bottom:1rem;">
+      <div class="form-field">
+        <label>Nouveau mot de passe</label>
+        <input id="pwd-new" type="password" placeholder="Nouveau mot de passe">
+      </div>
+    </div>
+    <div class="form-row full" style="margin-bottom:1.5rem;">
+      <div class="form-field">
+        <label>Confirmer le nouveau mot de passe</label>
+        <input id="pwd-confirm" type="password" placeholder="Confirmez le nouveau mot de passe">
+      </div>
+    </div>
+    <button class="btn-sky" onclick="saveNewPassword('${emp.id}')">💾 Enregistrer le nouveau mot de passe</button>
+  </div>`;
+}
+
+function saveNewPassword(empId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const current = document.getElementById('pwd-current').value;
+  const newPwd = document.getElementById('pwd-new').value;
+  const confirm = document.getElementById('pwd-confirm').value;
+  if (!current || !newPwd || !confirm) { showNotif('Veuillez remplir tous les champs'); return; }
+  if (emp.password && current !== emp.password) { showNotif('❌ Mot de passe actuel incorrect'); return; }
+  if (newPwd !== confirm) { showNotif('❌ Les mots de passe ne correspondent pas'); return; }
+  if (newPwd.length < 4) { showNotif('Le mot de passe doit avoir au moins 4 caractères'); return; }
+  emp.password = newPwd;
+  saveState();
+  showNotif('✅ Mot de passe modifié avec succès!');
+  setPage('dashboard');
+}
+
+function renderQuizEditor() {
+  const roles = t('roles');
+  return `<div class="page-header"><div><h1>🧩 ${t('quizEditor')}</h1><p>Créer/modifier les questions par poste</p></div>${homeBtn()}</div>
+  ${roles.map(role => {
+    const quiz = getQuiz(role);
+    return `<div class="section-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
+        <span style="font-size:1.4rem;">${ROLE_ICONS[role]||'👤'}</span><h3>${role}</h3>
+        <span class="chip">${quiz.length} question${quiz.length>1?'s':''}</span>
+      </div>
+      ${quiz.map((q, qi) => `<div style="margin-bottom:1rem;padding:14px;background:var(--sky-pale);border-radius:14px;border:2px solid var(--border-light);">
+        <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;">
+          <span style="font-weight:800;color:var(--sky-deep);min-width:24px;">Q${qi+1}</span>
+          <input value="${q.q}" oninput="updateQuizQ('${role}',${qi},this.value)"
+            style="flex:1;padding:7px 12px;border:2.5px solid var(--sky);border-radius:10px;font-family:Nunito,sans-serif;font-size:0.9rem;font-weight:700;background:var(--cream-pale);outline:none;color:var(--navy);">
+          <button onclick="removeQuizQ('${role}',${qi})" style="padding:6px 10px;background:var(--red-light);border:2px solid var(--red);border-radius:8px;color:var(--red);cursor:pointer;font-weight:800;font-size:0.8rem;font-family:Nunito,sans-serif;">✕</button>
+        </div>
+        ${q.opts.map((opt, oi) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;margin-left:32px;">
+          <div style="width:22px;height:22px;border-radius:50%;border:2.5px solid ${q.ans===oi?'var(--green)':'var(--border-light)'};background:${q.ans===oi?'var(--green-light)':'transparent'};display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:0.7rem;font-weight:800;color:${q.ans===oi?'var(--green-dark)':'var(--text-muted)'};flex-shrink:0;" onclick="setQuizAns('${role}',${qi},${oi})" title="Marquer comme bonne réponse">${q.ans===oi?'✓':oi+1}</div>
+          <input value="${opt}" oninput="updateQuizOpt('${role}',${qi},${oi},this.value)"
+            style="flex:1;padding:7px 12px;border:2px solid ${q.ans===oi?'var(--green)':'var(--border-light)'};border-radius:10px;font-family:Nunito,sans-serif;font-size:0.85rem;font-weight:600;outline:none;color:var(--text-main);">
+          <button onclick="removeQuizOpt('${role}',${qi},${oi})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.9rem;font-weight:800;">✕</button>
+        </div>`).join('')}
+        <button onclick="addQuizOpt('${role}',${qi})" style="margin-left:32px;margin-top:4px;padding:5px 12px;border:2px dashed var(--border);border-radius:8px;background:transparent;cursor:pointer;font-family:Nunito,sans-serif;font-size:0.78rem;font-weight:700;color:var(--text-muted);">+ Option</button>
+      </div>`).join('')}
+      <button onclick="addQuizQ('${role}')" style="width:100%;padding:10px;border:2.5px dashed var(--sky-deep);border-radius:12px;background:transparent;cursor:pointer;font-family:Nunito,sans-serif;font-size:0.85rem;font-weight:700;color:var(--sky-deep);">+ Ajouter une question</button>
+    </div>`;
+  }).join('')}
+  <button class="btn-sky" onclick="saveQuizzes()" style="margin-top:0.5rem;">✓ Enregistrer les quiz</button>`;
+}
+
+function getCustomOrDefaultQuiz(role) {
+  return customQuizzes[role] || JSON.parse(JSON.stringify(T[state.lang].quizTemplates[role] || []));
+}
+
+function updateQuizQ(role, qi, val) { ensureCustomQuiz(role); customQuizzes[role][qi].q = val; }
+function updateQuizOpt(role, qi, oi, val) { ensureCustomQuiz(role); customQuizzes[role][qi].opts[oi] = val; }
+function setQuizAns(role, qi, oi) { ensureCustomQuiz(role); customQuizzes[role][qi].ans = oi; setPage('quizEditor'); }
+function removeQuizQ(role, qi) { ensureCustomQuiz(role); if(customQuizzes[role].length>1){customQuizzes[role].splice(qi,1);setPage('quizEditor');}else showNotif('Au moins une question requise.'); }
+function removeQuizOpt(role, qi, oi) { ensureCustomQuiz(role); if(customQuizzes[role][qi].opts.length>2){customQuizzes[role][qi].opts.splice(oi,1);if(customQuizzes[role][qi].ans>=customQuizzes[role][qi].opts.length)customQuizzes[role][qi].ans=0;setPage('quizEditor');}else showNotif('Au moins 2 options.'); }
+function addQuizOpt(role, qi) { ensureCustomQuiz(role); customQuizzes[role][qi].opts.push('Nouvelle option'); setPage('quizEditor'); }
+function addQuizQ(role) { ensureCustomQuiz(role); customQuizzes[role].push({q:'Nouvelle question',opts:['Option A','Option B','Option C','Option D'],ans:0}); setPage('quizEditor'); }
+function ensureCustomQuiz(role) { if(!customQuizzes[role]) customQuizzes[role] = getCustomOrDefaultQuiz(role); }
+function saveQuizzes() { saveState(); showNotif(t('saved')); }
+
+// ═══════════════════════════════════════════════════════
+// QUIZ (employee)
+// ═══════════════════════════════════════════════════════
+function startQuiz() {
+  state.quizState = { qIdx: 0, answers: [], done: false };
+  state.activePage = 'quiz';
+  render();
+}
+
+function renderQuiz() {
+  const emp = getMyEmp();
+  const quiz = getQuiz(emp.role);
+  const qs = state.quizState;
+
+  if (!qs) return `<div class="page-header"><div><h1>🧩 ${t('quiz')}</h1></div>${homeBtn()}</div>`;
+
+  if (qs.done) {
+    const score = qs.answers.filter((a, i) => a === quiz[i].ans).length;
+    return `<div class="page-header"><div><h1>🏆 Résultats</h1></div>${homeBtn()}</div>
+    <div class="section-card" style="text-align:center;border-color:var(--green);background:var(--green-light);">
+      <div style="font-size:3rem;margin-bottom:1rem;">🎉</div>
+      <h2 style="color:var(--green-dark);margin-bottom:0.5rem;">${score}/${quiz.length} bonnes réponses</h2>
+      <p style="color:var(--green-dark);font-weight:700;margin-bottom:1.5rem;">${score===quiz.length?'Parfait!':score>=quiz.length/2?'Bon travail!':'Révisez les documents et réessayez.'}</p>
+      <button class="btn-sky" onclick="finishQuiz(${score},${quiz.length})">Continuer →</button>
+    </div>`;
+  }
+
+  const q = quiz[qs.qIdx];
+  const answered = qs.answers[qs.qIdx] !== undefined;
+
+  return `<div class="page-header"><div><h1>🧩 ${t('quiz')}</h1><p>Question ${qs.qIdx+1} / ${quiz.length}</p></div>${homeBtn()}</div>
+  <div class="section-card">
+    <div style="margin-bottom:1rem;">
+      <div class="progress-bar"><div class="progress-fill" style="width:${((qs.qIdx)/quiz.length)*100}%"></div></div>
+    </div>
+    <div class="quiz-card">
+      <div class="quiz-q">${q.q}</div>
+      <div class="quiz-options">
+        ${q.opts.map((opt, oi) => {
+          let cls = 'quiz-option';
+          if (answered) {
+            if (oi === q.ans) cls += ' correct';
+            else if (oi === qs.answers[qs.qIdx]) cls += ' wrong';
+          } else if (oi === qs.answers[qs.qIdx]) cls += ' selected';
+          return `<div class="${cls}" onclick="selectQuizAnswer(${oi})">${opt}</div>`;
+        }).join('')}
+      </div>
+    </div>
+    ${answered ? `<div style="text-align:right;margin-top:1rem;">
+      <button class="btn-sky" onclick="nextQuizQ(${quiz.length})">${qs.qIdx < quiz.length-1 ? 'Suivant →' : 'Voir les résultats →'}</button>
+    </div>` : ''}
+  </div>`;
+}
+
+function selectQuizAnswer(oi) {
+  if (!state.quizState || state.quizState.answers[state.quizState.qIdx] !== undefined) return;
+  state.quizState.answers[state.quizState.qIdx] = oi;
+  render();
+}
+
+function nextQuizQ(total) {
+  if (state.quizState.qIdx < total - 1) {
+    state.quizState.qIdx++;
+  } else {
+    state.quizState.done = true;
+  }
+  render();
+}
+
+function finishQuiz(score, total) {
+  const emp = getMyEmp();
+  emp.quizResults = { score, total, date: new Date().toLocaleDateString(state.lang==='fr'?'fr-CA':'en-CA') };
+  state.quizState = null;
+  saveState();
+  setPage('dashboard');
+  showNotif('🏆 Quiz complété!');
+}
+
+// ═══════════════════════════════════════════════════════
+// DOC MODAL
+// ═══════════════════════════════════════════════════════
+function renderDocModal() {
+  if (!state.docModal) return '';
+  const doc = allDocs().find(d => d.id === state.docModal);
+  if (!doc) return '';
+  const emp = state.isManager ? null : getMyEmp();
+  const att = emp && emp.attestations && emp.attestations[doc.id];
+
+  return `<div class="modal-overlay" onclick="closeDocModal()">
+    <div class="modal wide" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="doc-icon ${doc.iconColor}">${doc.isPDF?'📄':doc.icon}</div>
+          <div><h2>${doc.title}</h2><div style="font-size:0.82rem;color:var(--text-muted);font-weight:700;">${doc.sub||t('pdfDoc')}</div></div>
+        </div>
+        <button class="modal-close" onclick="closeDocModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        ${doc.isPDF && doc.dataUrl
+          ? `<iframe class="pdf-viewer" src="${doc.dataUrl}#toolbar=1&view=FitH" title="${doc.title}"></iframe>
+             <div style="margin-top:1rem;"><a class="btn-download" href="${doc.dataUrl}" download="${doc.title}.pdf">⬇ ${t('download')}</a></div>`
+          : `<div class="doc-content">${doc.content || ''}</div>`}
+        ${!state.isManager && emp ? `<div class="attest-box">
+          <p>${t('attestText')}</p>
+          ${!att
+            ? `<button class="attest-btn" onclick="attestDoc('${emp.id}','${doc.id}')">${t('attestBtn')}</button>`
+            : `<div class="attest-done">✔ ${t('attestDone')}${emp.attestations[doc.id+'_date']||''}</div>`}
+        </div>` : ''}
+      </div>
+      <div class="modal-footer"><button class="btn-sec" onclick="closeDocModal()">Fermer</button></div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// MODALS
+// ═══════════════════════════════════════════════════════
+function renderModal() {
+  if (!state.modal) return '';
+  const m = state.modal;
+
+  // NEW DOCUMENT
+  if (m.type === 'newDoc') {
+    const sf = state.pendingFile;
+    const roles = t('roles');
+    return `<div class="modal-overlay" onclick="closeModal()"><div class="modal" style="max-width:520px;" onclick="event.stopPropagation()">
+      <div class="modal-header"><h2>${t('newDoc')}</h2><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="form-row full"><div class="form-field"><label>${t('docName')}</label><input id="doc-name" type="text" placeholder="Ex: Allergie et manipulation alimentaire"></div></div>
+        <div class="form-row full"><div class="form-field"><label>${t('docCat')}</label><select id="doc-cat">
+          <option value="training">🎓 ${t('section_training')}</option>
+          <option value="policy">📋 ${t('section_policy')}</option>
+          <option value="procedure">🔑 ${t('section_procedures')}</option>
+          <option value="history">⭐ ${t('section_history')}</option>
+          <option value="custom">📂 ${t('section_custom')}</option>
+        </select></div></div>
+        <div class="form-row full"><div class="form-field">
+          <label>${t('docRoles')} (laisser vide = tous)</label>
+          <div class="training-grid" id="doc-roles-grid">${roles.map(r =>
+            `<div class="training-check" onclick="this.classList.toggle('sel')" data-role="${r}"><span style="font-size:15px;">${ROLE_ICONS[r]||'👤'}</span>${r}</div>`
+          ).join('')}</div>
+        </div></div>
+        <div class="form-row full"><div class="form-field"><label>${t('uploadPDF')}</label>
+          ${!sf ? `<div class="upload-zone" onclick="document.getElementById('pdf-input').click()" ondragover="event.preventDefault()" ondrop="handleDrop(event)">
+            <div style="font-size:2rem;margin-bottom:0.5rem;">📄</div>
+            <div style="font-size:0.9rem;font-weight:800;color:var(--text-main);">${t('dragPDF')}</div>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;font-weight:600;">${t('pdfOnly')}</div>
+          </div><input type="file" id="pdf-input" accept=".pdf,application/pdf" style="display:none" onchange="handleFileSelect(event)">`
+          : `<div class="file-preview"><span style="font-size:1.5rem;">📄</span><span class="fp-name">${sf.name}</span><span style="font-size:0.78rem;color:var(--text-muted);">${(sf.size/1024).toFixed(0)} KB</span><button class="fp-remove" onclick="state.pendingFile=null;render()">✕</button></div>`}
+        </div></div>
+      </div>
+      <div class="modal-footer"><button class="btn-sec" onclick="closeModal()">${t('cancel')}</button><button class="btn-sky" onclick="saveNewDoc()">${t('addDoc')}</button></div>
+    </div></div>`;
+  }
+
+  // EMP FILE
+  if (m.type === 'empFile') {
+    const emp = state.employees.find(e => e.id === m.empId);
+    if (!emp) return '';
+    const p = getEmpProgress(emp);
+    const sal = emp.salary[emp.salary.length - 1];
+    return `<div class="modal-overlay" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div><h2>${emp.name}</h2><div style="font-size:0.82rem;color:var(--text-muted);font-weight:700;">${ROLE_ICONS[emp.role]||''} ${emp.role} — ${emp.email}</div></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn-cream" style="font-size:0.82rem;padding:7px 14px;" onclick="openEditEmp('${emp.id}')">✏️ Modifier</button>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;">
+          <span class="chip green">${sal.amount}${t('per_hour')}</span>
+          <span class="chip">${emp.joined}</span>
+          <span class="chip ${p.pct===100?'green':''}">${p.pct}% intégration</span>
+          ${emp.warnings.length>0?`<span class="chip red">${emp.warnings.length} avert.</span>`:''}
+          ${emp.quizResults?`<span class="chip green">Quiz: ${emp.quizResults.score}/${emp.quizResults.total}</span>`:''}
+        </div>
+
+        <div style="border-top:2px solid var(--border-light);padding-top:1rem;margin-bottom:1rem;">
+          <div style="font-size:0.75rem;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:0.75rem;">💰 ${t('salary')}</div>
+          <div class="timeline">${[...emp.salary].reverse().map(s =>
+            `<div class="timeline-item" style="${s.type==='benefit'?'--dot-color:var(--green)':''}">
+            <div class="tl-date">${s.date}</div>
+            ${s.type==='benefit'
+              ? `<div class="tl-val" style="color:var(--green-dark);">🎁 ${s.benefit}</div><div class="tl-note">Avantage${s.note?' — '+s.note:''}</div>`
+              : `<div class="tl-val">${s.amount}${t('per_hour')}</div><div class="tl-note">${s.note}</div>`}
+          </div>`
+          ).join('')}</div>
+          <button class="btn-sec" style="margin-top:0.75rem;font-size:0.82rem;" onclick="openSalaryEdit('${emp.id}')">+ ${t('addSalary')}</button>
+        </div>
+
+        <div style="border-top:2px solid var(--border-light);padding-top:1rem;margin-bottom:1rem;">
+          <div style="font-size:0.75rem;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:0.75rem;">⚠️ ${t('warnings')}</div>
+          ${emp.warnings.length===0?`<p style="font-size:0.88rem;color:var(--text-muted);font-weight:700;">Aucun avertissement</p>`:''}
+          ${emp.warnings.map(w => `<div style="padding:12px;background:var(--red-light);border-radius:12px;margin-bottom:8px;border:2px solid var(--red);">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+              <span class="warn-badge ${w.type}">${w.type==='oral'?t('oral_warning'):t('written_warning')}</span>
+              <span style="font-size:0.75rem;color:var(--text-muted);font-weight:700;">${w.date}</span>
+            </div>
+            <div style="font-size:0.88rem;font-weight:600;margin-bottom:6px;">${w.text}</div>
+            ${w.signedBy?`<div style="font-size:0.78rem;color:var(--red);font-weight:700;">✔ Signé par ${w.signedBy} — ${w.signedDate}</div>`:`<div style="font-size:0.78rem;color:var(--text-muted);font-style:italic;">En attente de signature</div>`}
+          </div>`).join('')}
+          <button class="btn-sec" style="font-size:0.82rem;" onclick="openAddWarning('${emp.id}')">+ ${t('addWarning')}</button>
+        </div>
+
+        <div style="border-top:2px solid var(--border-light);padding-top:1rem;margin-bottom:1rem;">
+          <div style="font-size:0.75rem;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:0.75rem;">🔐 Primes (confidentiel — gestionnaire uniquement)</div>
+          ${(emp.primes||[]).length===0?`<p style="font-size:0.85rem;color:var(--text-muted);font-weight:700;margin-bottom:0.75rem;">Aucune prime enregistrée</p>`:''}
+          ${(emp.primes||[]).map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--purple-light);border-radius:10px;margin-bottom:6px;border:1.5px solid var(--purple);">
+            <div>
+              <div style="font-weight:800;color:var(--navy);font-size:0.88rem;">${p.amount}$ — ${p.desc}</div>
+              <div style="font-size:0.75rem;color:var(--text-muted);font-weight:600;">${p.date}</div>
+            </div>
+            <button onclick="deletePrime('${emp.id}','${p.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.9rem;font-weight:800;">✕</button>
+          </div>`).join('')}
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <input id="prime-amount-${emp.id}" type="number" placeholder="Montant $" style="width:100px;padding:7px 10px;border:2px solid var(--purple);border-radius:10px;font-family:Nunito,sans-serif;font-size:0.88rem;outline:none;">
+            <input id="prime-desc-${emp.id}" type="text" placeholder="Description (ex: Bonne performance)" style="flex:1;padding:7px 10px;border:2px solid var(--border-light);border-radius:10px;font-family:Nunito,sans-serif;font-size:0.88rem;outline:none;">
+            <button onclick="addPrime('${emp.id}')" class="btn-sky" style="font-size:0.82rem;padding:7px 14px;white-space:nowrap;">+ Prime</button>
+          </div>
+        </div>
+
+        <div style="border-top:2px solid var(--border-light);padding-top:1rem;">
+          <div style="font-size:0.75rem;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:0.75rem;">📋 ${t('progress')} — ${p.done}/${p.total}</div>
+          <div class="progress-bar" style="margin-bottom:10px;"><div class="progress-fill" style="width:${p.pct}%"></div></div>
+          <div class="doc-list">${empDocs(emp).map(doc => {
+            const att = emp.attestations && emp.attestations[doc.id];
+            return `<div class="doc-item" style="padding:9px 12px;" onclick="openDoc('${doc.id}')">
+              <div class="doc-icon ${doc.iconColor}" style="width:30px;height:30px;font-size:0.85rem;">${doc.isPDF?'📄':doc.icon}</div>
+              <div class="doc-info"><div class="doc-title" style="font-size:0.85rem;">${doc.title}</div></div>
+              <div class="doc-check ${att?'checked':''}">${att?'✓':''}</div>
+            </div>`;
+          }).join('')}</div>
+        </div>
+      </div>
+    </div></div>`;
+  }
+
+  // ADD WARNING
+  if (m.type === 'addWarning') {
+    return `<div class="modal-overlay" onclick="closeModal()"><div class="modal" style="max-width:480px;" onclick="event.stopPropagation()">
+      <div class="modal-header"><h2>⚠️ ${t('addWarning')}</h2><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="form-row"><div class="form-field"><label>Type</label><select id="warn-type"><option value="oral">${t('oral_warning')}</option><option value="written">${t('written_warning')}</option></select></div>
+        <div class="form-field"><label>Date</label><input id="warn-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div></div>
+        <div class="form-row full"><div class="form-field"><label>Raison</label><input id="warn-reason" type="text"></div></div>
+        <div class="form-row full"><div class="form-field"><label>Description</label><textarea id="warn-text"></textarea></div></div>
+      </div>
+      <div class="modal-footer"><button class="btn-sec" onclick="closeModal()">${t('cancel')}</button><button class="btn-danger" onclick="saveWarning('${m.empId}')">${t('addWarning')}</button></div>
+    </div></div>`;
+  }
+
+  // ADD SALARY
+  if (m.type === 'addSalary') {
+    return `<div class="modal-overlay" onclick="closeModal()"><div class="modal" style="max-width:460px;" onclick="event.stopPropagation()">
+      <div class="modal-header"><h2>💰 Salaire & Avantages</h2><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="form-row full" style="margin-bottom:1rem;">
+          <div class="form-field">
+            <label>Type d'entrée</label>
+            <div style="display:flex;gap:8px;">
+              <div class="training-check sel" id="sal-type-salary" onclick="setSalType('salary')" style="flex:1;justify-content:center;">💰 Modification de salaire</div>
+              <div class="training-check" id="sal-type-benefit" onclick="setSalType('benefit')" style="flex:1;justify-content:center;">🎁 Avantage</div>
+            </div>
+          </div>
+        </div>
+        <div id="sal-amount-row" class="form-row">
+          <div class="form-field"><label>Nouveau salaire (${t('per_hour')})</label><input id="sal-amount" type="number" step="0.25"></div>
+          <div class="form-field"><label>Date</label><input id="sal-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
+        </div>
+        <div id="sal-benefit-row" class="form-row" style="display:none;">
+          <div class="form-field"><label>Description de l'avantage</label><input id="sal-benefit-desc" type="text" placeholder="Ex: Carte d'essence Petro-Canada"></div>
+          <div class="form-field"><label>Date</label><input id="sal-date2" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
+        </div>
+        <div class="form-row full"><div class="form-field"><label>Note interne (optionnel)</label><input id="sal-note" type="text" placeholder="Ex: Révision annuelle, nouvelle responsabilité..."></div></div>
+      </div>
+      <div class="modal-footer"><button class="btn-sec" onclick="closeModal()">${t('cancel')}</button><button class="btn-sky" onclick="saveSalary('${m.empId}')">${t('save')}</button></div>
+    </div></div>`;
+  }
+
+  // ADD EMPLOYEE
+  if (m.type === 'addEmp') {
+    return `<div class="modal-overlay" onclick="closeModal()"><div class="modal" style="max-width:520px;" onclick="event.stopPropagation()">
+      <div class="modal-header"><h2>👤 ${t('addEmployee')}</h2><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="form-row full"><div class="form-field"><label>${t('name')}</label><input id="emp-name" type="text"></div></div>
+        <div class="form-row"><div class="form-field"><label>Poste principal</label><select id="emp-role">${t('roles').map(r=>`<option>${r}</option>`).join('')}</select></div>
+        <div class="form-field"><label>${t('email')}</label><input id="emp-email" type="email"></div></div>
+        <div class="form-row full"><div class="form-field"><label>Mot de passe temporaire</label><input id="emp-password" type="text" value="1234"></div></div>
+        <div class="form-row full"><div class="form-field"><label>${t('chooseTraining')}</label>
+          <div class="training-grid" id="emp-training-grid">${t('roles').map(r =>
+            `<div class="training-check" onclick="this.classList.toggle('sel')" data-role="${r}"><span style="font-size:15px;">${ROLE_ICONS[r]||'👤'}</span>${r}</div>`
+          ).join('')}</div>
+        </div></div>
+        <div class="form-row"><div class="form-field"><label>Salaire (${t('per_hour')})</label><input id="emp-salary" type="number" step="0.25" value="17"></div>
+        <div class="form-field"><label>Date d'embauche</label><input id="emp-date" type="date" value="${new Date().toISOString().split('T')[0]}"></div></div>
+      </div>
+      <div class="modal-footer"><button class="btn-sec" onclick="closeModal()">${t('cancel')}</button><button class="btn-sky" onclick="saveNewEmp()">${t('save')}</button></div>
+    </div></div>`;
+  }
+
+  // EVAL (self-evaluation)
+  if (m.type === 'eval') {
+    const emp = state.employees.find(e => e.id === m.empId);
+    const criteria = getEvalCriteria(emp ? emp.role : 'Cuisine');
+    return `<div class="modal-overlay" onclick="closeModal()"><div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header"><h2>${t('selfEval')} — ${emp?emp.name:''}</h2><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        ${criteria.map((section, si) => `<div class="eval-section-label">${section.cat}</div>
+          ${section.items.map((item, ii) => `<div class="eval-row">
+            <div class="eval-label">${item}</div>
+            <div style="display:flex;gap:4px;">${[1,2,3,4,5].map(s =>
+              `<div class="score-dot ${(state.newEvalScores[si+'-'+ii]||0)>=s?'active':''}" onclick="setScore('${si}-${ii}',${s})">${s}</div>`
+            ).join('')}</div>
+          </div>`).join('')}`).join('')}
+        <div style="margin-top:1rem;"><label style="font-size:0.75rem;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;display:block;margin-bottom:5px;">Notes</label>
+        <textarea id="eval-note" style="width:100%;padding:9px 12px;border:2.5px solid var(--border-light);border-radius:12px;font-family:Nunito,sans-serif;font-size:0.9rem;font-weight:600;resize:vertical;min-height:80px;outline:none;color:var(--text-main);"></textarea></div>
+      </div>
+      <div class="modal-footer"><button class="btn-sec" onclick="closeModal()">${t('cancel')}</button><button class="btn-sky" onclick="saveEval('${m.empId}')">${t('save')}</button></div>
+    </div></div>`;
+  }
+
+  // ANNOTATE
+  if (m.type === 'annotate') {
+    const emp = state.employees.find(e => e.id === m.empId);
+    const ev = emp?.evals.find(e => e.id === m.evalId);
+    return `<div class="modal-overlay" onclick="closeModal()"><div class="modal" style="max-width:460px;" onclick="event.stopPropagation()">
+      <div class="modal-header"><h2>💬 ${t('annotate')} — ${emp?.name}</h2><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="form-row full"><div class="form-field"><label>${t('annotation')}</label>
+          <textarea id="ann-text" style="width:100%;padding:9px 12px;border:2.5px solid var(--border-light);border-radius:12px;font-family:Nunito,sans-serif;font-size:0.9rem;font-weight:600;resize:vertical;min-height:100px;outline:none;color:var(--text-main);">${ev?.annotation||''}</textarea>
+        </div></div>
+      </div>
+      <div class="modal-footer"><button class="btn-sec" onclick="closeModal()">${t('cancel')}</button><button class="btn-sky" onclick="saveAnnotation('${m.empId}','${m.evalId}')">${t('save')}</button></div>
+    </div></div>`;
+  }
+
+  // EDIT EMPLOYEE INFO
+  if (m.type === 'editEmp') {
+    const emp = state.employees.find(e => e.id === m.empId);
+    if (!emp) return '';
+    const roles = t('roles');
+    return `<div class="modal-overlay" onclick="closeModal()"><div class="modal" style="max-width:520px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2>✏️ Modifier — ${emp.name}</h2>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row full"><div class="form-field">
+          <label>Nom complet</label>
+          <input id="edit-name" type="text" value="${emp.name}">
+        </div></div>
+        <div class="form-row">
+          <div class="form-field">
+            <label>Poste principal</label>
+            <select id="edit-role">${roles.map(r => `<option ${emp.role===r?'selected':''}>${r}</option>`).join('')}</select>
+          </div>
+          <div class="form-field">
+            <label>Courriel</label>
+            <input id="edit-email" type="email" value="${emp.email}">
+          </div>
+        </div>
+        <div class="form-row"><div class="form-field">
+          <label>Date d'embauche</label>
+          <input id="edit-joined" type="date" value="${emp.joined}">
+        </div>
+        <div class="form-field">
+          <label>Nouveau mot de passe (laisser vide = inchangé)</label>
+          <input id="edit-password" type="password" placeholder="Nouveau mot de passe">
+        </div></div>
+        <div class="form-row full"><div class="form-field">
+          <label>Formations assignées</label>
+          <div class="training-grid" id="edit-training-grid">
+            ${roles.map(r => `<div class="training-check ${(emp.training||[]).includes(r)?'sel':''}" onclick="this.classList.toggle('sel')" data-role="${r}">
+              <span style="font-size:15px;">${ROLE_ICONS[r]||'👤'}</span>${r}
+            </div>`).join('')}
+          </div>
+        </div></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-sec" onclick="closeModal()">${t('cancel')}</button>
+        <button class="btn-sky" onclick="saveEditEmp('${emp.id}')">${t('save')}</button>
+      </div>
+    </div></div>`;
+  }
+
+  // FIRST LOGIN PASSWORD CHANGE
+  if (m.type === 'firstLoginPwd') {
+    const emp = state.employees.find(e => e.id === m.empId);
+    return `<div class="modal-overlay"><div class="modal" style="max-width:440px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <div>
+          <h2>👋 Bienvenue, ${emp?.name?.split(' ')[0] || ''}!</h2>
+          <div style="font-size:0.82rem;color:var(--text-muted);font-weight:700;">Première connexion — sécurisez votre compte</div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div style="background:var(--cream-pale);border:2px solid var(--cream);border-radius:14px;padding:1rem;margin-bottom:1.2rem;">
+          <p style="font-size:0.88rem;font-weight:700;color:var(--navy);">🔒 Pour votre sécurité, veuillez choisir un nouveau mot de passe personnel. Votre mot de passe temporaire ne sera plus accepté après cette étape.</p>
+        </div>
+        <div class="form-row full" style="margin-bottom:1rem;">
+          <div class="form-field">
+            <label>Nouveau mot de passe</label>
+            <input id="fl-pwd-new" type="password" placeholder="Choisissez un mot de passe sécurisé" autofocus>
+          </div>
+        </div>
+        <div class="form-row full">
+          <div class="form-field">
+            <label>Confirmer le mot de passe</label>
+            <input id="fl-pwd-confirm" type="password" placeholder="Répétez votre mot de passe">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:flex-end;">
+        <button class="btn-sky" onclick="saveFirstLoginPwd('${m.empId}')">🔐 Confirmer mon mot de passe</button>
+      </div>
+    </div></div>`;
+  }
+
+  return '';
+}
+
+// ═══════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════
+function setLang(l) { state.lang = l; render(); }
+function switchMode() { state.authMode = state.authMode==='login'?'register':'login'; state.regTraining = []; render(); }
+function setPage(p) { state.activePage = p; render(); }
+
+function saveFirstLoginPwd(empId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const newPwd = document.getElementById('fl-pwd-new')?.value;
+  const confirm = document.getElementById('fl-pwd-confirm')?.value;
+  if (!newPwd || newPwd.length < 4) { showNotif('Le mot de passe doit avoir au moins 4 caractères'); return; }
+  if (newPwd !== confirm) { showNotif('❌ Les mots de passe ne correspondent pas'); return; }
+  emp.password = newPwd;
+  emp.firstLogin = false;
+  saveState();
+  state.modal = null;
+  render();
+  showNotif('✅ Mot de passe configuré! Bienvenue ' + emp.name.split(' ')[0] + '!');
+}
+
+function closeModal() { state.modal = null; state.pendingFile = null; render(); }
+function closeDocModal() { state.docModal = null; render(); }
+function openDoc(id) { state.docModal = id; render(); }
+
+
+function addPrime(empId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const amount = parseFloat(document.getElementById('prime-amount-'+empId)?.value);
+  const desc = document.getElementById('prime-desc-'+empId)?.value?.trim();
+  if (!amount || !desc) { showNotif('Montant et description requis'); return; }
+  if (!emp.primes) emp.primes = [];
+  emp.primes.push({ id: 'pr'+Date.now(), amount, desc, date: new Date().toLocaleDateString('fr-CA') });
+  saveState();
+  state.modal = {type:'empFile', empId}; render();
+  showNotif('✅ Prime ajoutée');
+}
+
+function deletePrime(empId, primeId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp || !emp.primes) return;
+  emp.primes = emp.primes.filter(p => p.id !== primeId);
+  saveState();
+  state.modal = {type:'empFile', empId}; render();
+  showNotif('Prime supprimée');
+}
+
+function openEditEmp(id) {
+  state.modal = {type:'editEmp', empId:id};
+  render();
+}
+
+function saveEditEmp(empId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const name  = document.getElementById('edit-name').value.trim();
+  const role  = document.getElementById('edit-role').value;
+  const email = document.getElementById('edit-email').value.trim();
+  const joined = document.getElementById('edit-joined').value;
+  const pwd   = document.getElementById('edit-password').value;
+
+  if (!name || !email) { showNotif('Nom et courriel requis'); return; }
+
+  // Update training from grid
+  const selCells = document.querySelectorAll('#edit-training-grid .sel');
+  const training = selCells.length > 0 ? [...selCells].map(c => c.dataset.role) : [role];
+
+  // Apply changes
+  const oldName = emp.name;
+  emp.name   = name;
+  emp.role   = role;
+  emp.email  = email;
+  emp.joined = joined;
+  emp.training = training;
+  if (pwd && pwd.length >= 4) emp.password = pwd;
+
+  // If current user is this employee, update currentUser name
+  if (state.currentUser && state.currentUser.name === oldName) {
+    state.currentUser.name = name;
+    state.currentUser.role = role;
+  }
+
+  saveState();
+  state.modal = {type:'empFile', empId: empId}; // reopen file modal
+  render();
+  showNotif('✅ ' + t('saved'));
+}
+
+function openEmpFile(id) { state.modal = {type:'empFile', empId:id}; render(); }
+function openAddWarning(id) { state.modal = {type:'addWarning', empId:id}; render(); }
+function openSalaryEdit(id) { state.modal = {type:'addSalary', empId:id}; render(); }
+function openAddEmp() { state.modal = {type:'addEmp'}; render(); }
+function openNewDoc() { state.pendingFile = null; state.modal = {type:'newDoc'}; render(); }
+function openSelfEval() { const e = getMyEmp(); state.newEvalScores = {}; state.modal = {type:'eval', empId:e.id}; render(); }
+function openAnnotate(empId, evalId) { state.modal = {type:'annotate', empId, evalId}; render(); }
+function toggleRegTraining(r) { const i = state.regTraining.indexOf(r); i>-1?state.regTraining.splice(i,1):state.regTraining.push(r); render(); }
+function logout() { state.screen='auth'; state.currentUser=null; state.authMode='login'; state.regTraining=[]; state.isManager=false; render(); }
+
+function doAuth() {
+  const email = document.getElementById('auth-email').value;
+  if (!email) { showNotif('Email requis'); return; }
+
+  if (state.authMode === 'register') {
+    const name = document.getElementById('reg-name').value;
+    const role = document.getElementById('reg-role').value;
+    const pwd = document.getElementById('auth-pwd').value || '1234';
+    if (!name) { showNotif('Nom requis'); return; }
+    const training = state.regTraining.length > 0 ? state.regTraining : [role];
+    const newEmp = {
+      id: 'e'+Date.now(), name, role, email, password: pwd,
+      training, joined: new Date().toISOString().split('T')[0],
+      salary: [{date: new Date().toISOString().split('T')[0], amount: 17, note: 'Embauche'}],
+      docs: {}, attestations: {}, warnings: [], evals: [], quizResults: null,
+      notifications: {docs:0, salary:0, warnings:0, evals:0},
+      firstLogin: true, primes: []
+    };
+    state.employees.push(newEmp);
+    state.currentUser = {name, role};
+    saveState();
+  } else {
+    const found = state.employees.find(e => e.email === email);
+    if (!found) { showNotif('Courriel introuvable'); return; }
+    const pwd = document.getElementById('auth-pwd').value;
+    if (found.password && pwd !== found.password) { showNotif('Mot de passe incorrect'); return; }
+    state.currentUser = {name: found.name, role: found.role};
+    // Show first-login password change modal if it's their first time
+    if (found.firstLogin) {
+      state.isManager = false; state.screen = 'app'; state.activePage = 'dashboard';
+      render();
+      showNotif(t('welcome') + ', ' + state.currentUser.name.split(' ')[0] + '! 👋');
+      setTimeout(() => { state.modal = {type:'firstLoginPwd', empId: found.id}; render(); }, 400);
+      return;
+    }
+  }
+  state.isManager = false; state.screen = 'app'; state.activePage = 'dashboard';
+  // Vérifier si c'est la première connexion (mdp temporaire non changé)
+  const loggedEmp = state.employees.find(e => e.name === state.currentUser?.name);
+  if (loggedEmp && !loggedEmp.passwordChanged) {
+    state.showFirstLoginModal = true;
+    state.firstLoginEmpId = loggedEmp.id;
+  }
+  render(); showNotif(t('welcome') + ', ' + state.currentUser.name.split(' ')[0] + '! 👋');
+}
+
+function attestDoc(empId, docId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  if (!emp.attestations) emp.attestations = {};
+  emp.attestations[docId] = true;
+  emp.attestations[docId+'_date'] = new Date().toLocaleDateString(state.lang==='fr'?'fr-CA':'en-CA');
+  if (!emp.docs) emp.docs = {};
+  emp.docs[docId] = true;
+  saveState();
+  closeDocModal(); showNotif(t('saved')); render();
+}
+
+function setScore(key, s) {
+  state.newEvalScores[key] = s;
+  const emp = state.employees.find(e => e.id === state.modal?.empId);
+  const criteria = getEvalCriteria(emp ? emp.role : 'Cuisine');
+  const parts = key.split('-');
+  const si = parseInt(parts[0]);
+  const ii = parseInt(parts[1]);
+  let rowIdx = 0;
+  for (let i = 0; i < si; i++) rowIdx += criteria[i].items.length;
+  rowIdx += ii;
+  const rows = document.querySelectorAll('.eval-row');
+  if (rows[rowIdx]) rows[rowIdx].querySelectorAll('.score-dot').forEach((d, idx) => d.classList.toggle('active', idx < s));
+}
+
+function saveWarning(empId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const w = {
+    id: 'w'+Date.now(),
+    type: document.getElementById('warn-type').value,
+    date: document.getElementById('warn-date').value,
+    reason: document.getElementById('warn-reason').value,
+    text: document.getElementById('warn-text').value || document.getElementById('warn-reason').value,
+    signedBy: null, signedDate: null
+  };
+  emp.warnings.push(w);
+  // Add notification
+  if (!emp.notifications) emp.notifications = {docs:0,salary:0,warnings:0,evals:0};
+  emp.notifications.warnings = (emp.notifications.warnings||0) + 1;
+  saveState();
+  closeModal(); showNotif(t('warningAdded')); render();
+}
+
+function signWarning(empId, warnId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const w = emp.warnings.find(w => w.id === warnId);
+  if (!w) return;
+  const nameInput = document.getElementById('warn-sign-'+warnId);
+  if (!nameInput || !nameInput.value.trim()) { showNotif('Veuillez écrire votre nom complet'); return; }
+  w.signedBy = nameInput.value.trim();
+  w.signedDate = new Date().toLocaleDateString(state.lang==='fr'?'fr-CA':'en-CA');
+  saveState(); showNotif(t('saved')); render();
+}
+
+
+function setSalType(type) {
+  const salRow = document.getElementById('sal-amount-row');
+  const benRow = document.getElementById('sal-benefit-row');
+  const salBtn = document.getElementById('sal-type-salary');
+  const benBtn = document.getElementById('sal-type-benefit');
+  if (type === 'salary') {
+    salRow.style.display = ''; benRow.style.display = 'none';
+    salBtn.classList.add('sel'); benBtn.classList.remove('sel');
+  } else {
+    salRow.style.display = 'none'; benRow.style.display = '';
+    benBtn.classList.add('sel'); salBtn.classList.remove('sel');
+  }
+}
+
+function saveSalary(empId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const isBenefit = document.getElementById('sal-type-benefit')?.classList.contains('sel');
+  const note = document.getElementById('sal-note')?.value || '';
+
+  if (isBenefit) {
+    const desc = document.getElementById('sal-benefit-desc')?.value?.trim();
+    const date = document.getElementById('sal-date2')?.value || new Date().toISOString().split('T')[0];
+    if (!desc) { showNotif('Description de l\'avantage requise'); return; }
+    emp.salary.push({ type: 'benefit', date, benefit: desc, note, amount: null });
+  } else {
+    const amount = parseFloat(document.getElementById('sal-amount')?.value);
+    const date = document.getElementById('sal-date')?.value || new Date().toISOString().split('T')[0];
+    if (!amount) { showNotif('Montant requis'); return; }
+    emp.salary.push({ type: 'salary', amount, date, note: note || 'Mise à jour' });
+  }
+  if (!emp.notifications) emp.notifications = {docs:0,salary:0,warnings:0,evals:0};
+  emp.notifications.salary = (emp.notifications.salary||0) + 1;
+  saveState();
+  closeModal(); showNotif(t('saved')); render();
+}
+
+function saveNewEmp() {
+  const name = document.getElementById('emp-name').value;
+  const role = document.getElementById('emp-role').value;
+  const email = document.getElementById('emp-email').value;
+  const password = document.getElementById('emp-password').value || '1234';
+  const salary = parseFloat(document.getElementById('emp-salary').value) || 17;
+  const date = document.getElementById('emp-date').value;
+  if (!name) return;
+  const selCells = document.querySelectorAll('#emp-training-grid .sel');
+  const training = selCells.length > 0 ? [...selCells].map(c => c.dataset.role) : [role];
+  state.employees.push({
+    id: 'e'+Date.now(), name, role, email, password, training,
+    joined: date, salary: [{date, amount: salary, note: 'Embauche'}],
+    docs: {}, attestations: {}, warnings: [], evals: [], quizResults: null,
+    notifications: {docs:0,salary:0,warnings:0,evals:0},
+    firstLogin: true, primes: []
+  });
+  saveState();
+  closeModal(); showNotif(t('saved')); render();
+}
+
+function saveEval(empId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const note = document.getElementById('eval-note') ? document.getElementById('eval-note').value : '';
+  const ev = {
+    id: 'ev'+Date.now(),
+    date: new Date().toLocaleDateString(state.lang==='fr'?'fr-CA':'en-CA'),
+    type: 'self', role: emp.role,
+    scores: {...state.newEvalScores}, note, annotation: null
+  };
+  emp.evals.push(ev);
+  // Notification for manager (we just save it)
+  state.newEvalScores = {};
+  saveState();
+  closeModal(); showNotif(t('saved')); render();
+}
+
+function saveAnnotation(empId, evalId) {
+  const emp = state.employees.find(e => e.id === empId);
+  if (!emp) return;
+  const ev = emp.evals.find(e => e.id === evalId);
+  if (!ev) return;
+  ev.annotation = document.getElementById('ann-text').value;
+  // Notification for employee
+  if (!emp.notifications) emp.notifications = {docs:0,salary:0,warnings:0,evals:0};
+  emp.notifications.evals = (emp.notifications.evals||0) + 1;
+  saveState();
+  closeModal(); showNotif(t('saved')); render();
+}
+
+function saveNewDoc() {
+  const name = document.getElementById('doc-name').value.trim();
+  const cat = document.getElementById('doc-cat').value;
+  if (!name) { showNotif('Nom requis'); return; }
+
+  const selRoles = document.querySelectorAll('#doc-roles-grid .sel');
+  const forRoles = selRoles.length > 0 ? [...selRoles].map(c => c.dataset.role) : null;
+
+  const newDoc = {
+    id: 'cd'+Date.now(), cat, isPDF: !!state.pendingFile,
+    icon: '📄', iconColor: 'sky', title: name, sub: '',
+    addedBy: 'Gestionnaire', addedDate: new Date().toISOString().split('T')[0],
+    isNew: true, forRoles,
+    content: state.pendingFile ? null : `<p>${name}</p>`
+  };
+
+  if (state.pendingFile) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      newDoc.dataUrl = e.target.result;
+      customDocs.push(newDoc);
+      // Add notification to relevant employees
+      state.employees.forEach(emp => {
+        if (!forRoles || forRoles.some(r => (emp.training||[]).includes(r))) {
+          if (!emp.notifications) emp.notifications = {docs:0,salary:0,warnings:0,evals:0};
+          emp.notifications.docs = (emp.notifications.docs||0) + 1;
+        }
+      });
+      state.pendingFile = null;
+      saveState(); closeModal(); showNotif(t('saved')); render();
+    };
+    reader.readAsDataURL(state.pendingFile);
+  } else {
+    customDocs.push(newDoc);
+    state.employees.forEach(emp => {
+      if (!forRoles || forRoles.some(r => (emp.training||[]).includes(r))) {
+        if (!emp.notifications) emp.notifications = {docs:0,salary:0,warnings:0,evals:0};
+        emp.notifications.docs = (emp.notifications.docs||0) + 1;
+      }
+    });
+    saveState(); closeModal(); showNotif(t('saved')); render();
+  }
+}
+
+function deleteDoc(id) {
+  if (!confirm('Supprimer ce document?')) return;
+  customDocs = customDocs.filter(d => d.id !== id);
+  saveState(); render(); showNotif('Document supprimé');
+}
+
+function handleFileSelect(evt) {
+  const f = evt.target.files[0];
+  if (f && (f.type === 'application/pdf' || f.name.endsWith('.pdf'))) {
+    state.pendingFile = f; render();
+  } else { showNotif('Fichier PDF requis'); }
+}
+function handleDrop(evt) {
+  evt.preventDefault();
+  const f = evt.dataTransfer.files[0];
+  if (f && (f.type === 'application/pdf' || f.name.endsWith('.pdf'))) {
+    state.pendingFile = f; render();
+  } else { showNotif('Fichier PDF requis'); }
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+loadState();
+render();
+</script>
+</body>
+</html>
