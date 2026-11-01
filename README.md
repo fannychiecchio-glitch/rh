@@ -4,7 +4,7 @@ Plateforme RH des employés de Marius & Fanny (pâtisserie-boulangerie, Laval et
 
 - **Site** : fichiers `index.html`, `style.css`, `app.js`, `config.js`, publiés avec GitHub Pages.
 - **Données et connexions** : Supabase (région Canada Central). Toutes les règles d'accès sont appliquées par la base de données (sécurité ligne par ligne). Ce dépôt ne contient aucune donnée d'employé ni aucune clé secrète.
-- **Courriels** : envoyés par Supabase au moyen du SMTP de Brevo.
+- **Courriels** : invitations et mots de passe envoyés par Supabase (SMTP personnalisé); avis de la plateforme envoyés par la fonction `notify` (SMTP, port 465).
 
 ## Mise en place (étape 1)
 
@@ -16,6 +16,13 @@ Plateforme RH des employés de Marius & Fanny (pâtisserie-boulangerie, Laval et
 4. **Courriels** — Authentication → Emails → SMTP Settings → activer *Custom SMTP* avec les identifiants SMTP de Brevo (`smtp-relay.brevo.com`, port 587).
 5. **Fonction d'invitation** — Edge Functions → Deploy a new function → Via Editor : nom `invite-employee`, coller `supabase/functions/invite-employee/index.ts`, Deploy. Ajouter le secret `SITE_URL` (adresse du site).
 6. **Publication** — GitHub → Settings → Pages → *Deploy from a branch* → `main` / `(root)`.
+
+## Mise en place (étape 2)
+
+1. **Base de données** — SQL Editor → New query : coller `supabase/03-etape2.sql`, puis Run.
+2. **Fonction des avis** — Edge Functions → Deploy a new function → Via Editor : nom `notify`, coller `supabase/functions/notify/index.ts`, Deploy (garder *Verify JWT* activé).
+3. **Secrets** (Edge Functions → Secrets) : `SMTP_HOST` (ex. `smtp.gmail.com`), `SMTP_USER` (adresse complète), `SMTP_PASS` (mot de passe d'application), `SMTP_FROM` (adresse d'envoi, facultatif). Port 465 par défaut (les ports 25 et 587 sont bloqués par Supabase).
+4. **Réglages dans la plateforme** — Employés → Contrats : renseignements de l'employeur et adresses des magasins.
 
 ## Sécurité
 

@@ -1,7 +1,9 @@
 /* =====================================================================
-   Espace équipe Marius & Fanny — version en ligne (étape 1)
+   Espace équipe Marius & Fanny — version en ligne (étapes 1 et 2)
    Connexion sécurisée, dossiers des employés, fiche d'embauche,
-   salaire et avantages, cahier de l'employé, nouvelles.
+   salaire et avantages, cahier de l'employé, nouvelles,
+   vacances et calendriers, avertissements, contrats signés,
+   messages et avis par courriel.
    ===================================================================== */
 'use strict';
 const sb = window.supabase.createClient(MF_CONFIG.supabaseUrl, MF_CONFIG.supabaseKey, {
@@ -31,6 +33,23 @@ const teamOf = e => e && e.magasin === 'Production' ? 'prod' : 'vente';
 const defTip = m => m === 'Production' ? 'prod' : m === 'Montréal' ? 'mtl' : 'laval';
 const INFO_REQ = ['birth', 'street', 'city', 'postal', 'phone', 'email_perso', 'em_name', 'em_rel', 'em_phone'];
 const infoDone = i => !!i && INFO_REQ.every(k => String(i[k] || '').trim());
+const fs = d => new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'long' });
+const nDays = (a, b) => Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 864e5) + 1;
+const range = (a, b) => a === b ? fd(a) : `${fs(a)} au ${fd(b)}`;
+const STATUS = { 'en attente': ['p-warn', 'En attente'], 'acceptée': ['p-ok', 'Acceptée'], 'refusée': ['p-crit', 'Refusée'], 'contre-proposition': ['p-acc', 'Autres dates proposées'], 'annulée': ['p-mute', 'Annulée'] };
+const pill = s => { const [c, t] = STATUS[s] || ['p-mute', s]; return `<span class="pill ${c}">${t}</span>`; };
+function season() { const d = new Date(); const y = d.getMonth() >= 8 ? d.getFullYear() + 1 : d.getFullYear(); return { y, a: `${y}-05-01`, b: `${y}-09-30` }; }
+const MSG_TYPES = { suggestion: 'Suggestion', demande: 'Demande spéciale', question: 'Question', autre: 'Autre' };
+const MSG_PILL = { suggestion: 'p-acc', demande: 'p-warn', question: 'p-mute', autre: 'p-mute' };
+const WARN_LEVELS = ['Verbal consigné', 'Écrit', 'Final'];
+const TPL_KEYS = [['vend', 'Vente'], ['gerant', 'Vente'], ['caiss', 'Vente'], ['livr', 'Livreur'], ['plong', 'Plongeur'], ['patiss', 'Pâtissier'], ['decor', 'Pâtissier'], ['chocol', 'Chocolatier'], ['boulang', 'Boulanger'], ['cuisin', 'Cuisinier']];
+const MAIL_KINDS = {
+  warning: ['Nouvel avertissement à lire', 'emp'], leave_answer: ['Réponse à une demande de vacances', 'emp'], contract: ['Contrat de travail à signer', 'emp'],
+  message_reply: ['Réponse à un message', 'emp'], news: ['Nouvelle publiée (quand tu coches l’envoi)', 'emp'],
+  leave_request: ['Nouvelle demande de vacances', 'adm'], message_new: ['Nouveau message d’un employé', 'adm'], contract_signed: ['Contrat signé par un employé', 'adm'],
+};
+// Avis par courriel : le site dit seulement quel événement est arrivé; la fonction « notify » vérifie les droits et choisit le destinataire.
+function notify(kind, id) { sb.functions.invoke('notify', { body: { kind, id } }).then(({ data, error }) => { if (error || data?.error) console.warn('Courriel non envoyé', kind, data?.error || error); }).catch(e => console.warn(e)); }
 
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, 3200); }
 function modal(title, body, wide) {
@@ -126,12 +145,22 @@ function messageView(title, text) {
 
 /* ---------- Coquille de l'application ---------- */
 const navItem = (page, label, active, n) => `<button onclick="App.go('${page}')" aria-current="${active}">${label}${n ? `<span class="count">${n}</span>` : ''}</button>`;
-const ADMIN_GROUPS = { emps: [['emps', 'Dossiers']], comms: [['handbook', 'Cahier de l’employé'], ['news', 'Nouvelles']] };
-const EMP_GROUPS = { dossier: [['minfo', 'Mes informations'], ['msal', 'Salaire et avantages']] };
+const ADMIN_GROUPS = { emps: [['emps', 'Dossiers'], ['contracts', 'Contrats']], comms: [['msgs', 'Messages'], ['handbook', 'Cahier de l’employé'], ['news', 'Nouvelles'], ['mail', 'Courriels']] };
+const EMP_GROUPS = { dossier: [['minfo', 'Mes informations'], ['mcontract', 'Mon contrat'], ['msal', 'Salaire et avantages'], ['mwarn', 'Avertissements']] };
 const groupOf = (G, p) => Object.keys(G).find(k => G[k].some(x => x[0] === p));
-function subTabs(G) { const g = groupOf(G, st.view.page); if (!g || G[g].length < 2) return ''; return `<nav class="subtabs">${G[g].map(([p, l]) => `<button onclick="App.go('${p}')" aria-current="${st.view.page === p}">${l}</button>`).join('')}</nav>`; }
-function adminNav() { const p = st.view.page, g = groupOf(ADMIN_GROUPS, p); return navItem('dash', 'Tableau de bord', p === 'dash') + navItem('emps', 'Employés', g === 'emps' || p === 'emp') + navItem('handbook', 'Communication', g === 'comms'); }
-function empNav() { const p = st.view.page; const n = st.data.myInfo === undefined ? 0 : (infoDone(st.data.myInfo) ? 0 : 1); return navItem('home', 'Accueil', p === 'home') + navItem('minfo', 'Mon dossier', !!groupOf(EMP_GROUPS, p), n) + navItem('macct', 'Mon compte', p === 'macct'); }
+function subTabs(G) { const g = groupOf(G, st.view.page); if (!g || G[g].length < 2) return ''; const c = subCounts(); return `<nav class="subtabs">${G[g].map(([p, l]) => `<button onclick="App.go('${p}')" aria-current="${st.view.page === p}">${l}${c[p] ? ` <span class="count">${c[p]}</span>` : ''}</button>`).join('')}</nav>`; }
+function subCounts() {
+  if (st.role === 'admin') { const b = st.badges || {}; return { contracts: b.ctr, msgs: b.msgs }; }
+  const d = st.data; return { minfo: d.myInfo === undefined ? 0 : infoDone(d.myInfo) ? 0 : 1, mcontract: (d.myCtr || []).filter(c => !c.emp_sig_at).length, mwarn: (d.myWarn || []).filter(w => !w.ack_at).length };
+}
+function adminNav() { const p = st.view.page, g = groupOf(ADMIN_GROUPS, p), b = st.badges || {}; return navItem('dash', 'Tableau de bord', p === 'dash') + navItem('emps', 'Employés', g === 'emps' || p === 'emp', b.ctr) + navItem('leaves', 'Congés', p === 'leaves', b.leaves) + navItem('msgs', 'Communication', g === 'comms', b.msgs); }
+function empNav() {
+  const p = st.view.page, c = subCounts(), d = st.data;
+  const nDos = (c.minfo || 0) + (c.mcontract || 0) + (c.mwarn || 0);
+  const nLeave = (d.myLeaves || []).filter(l => l.status === 'contre-proposition' || (!l.seen && ['acceptée', 'refusée'].includes(l.status))).length;
+  const nMsg = (d.myThreads || []).filter(t => t.unread_emp).length;
+  return navItem('home', 'Accueil', p === 'home') + navItem('minfo', 'Mon dossier', !!groupOf(EMP_GROUPS, p), nDos) + navItem('mleave', 'Mes congés', p === 'mleave', nLeave) + navItem('mmsg', 'Messages', p === 'mmsg', nMsg) + navItem('macct', 'Mon compte', p === 'macct');
+}
 
 function render() {
   const app = $('#app'); const m = isMob(); $('#frame').classList.toggle('mobroot', m);
@@ -155,6 +184,40 @@ async function loadPage() {
   const p = st.view.page; st.loading = true; render();
   try {
     if (st.role === 'admin') {
+      const cnt = t => t.select('id', { count: 'exact', head: true });
+      const [b1, b2, b3] = await Promise.all([cnt(sb.from('leave_requests')).eq('status', 'en attente'), cnt(sb.from('contracts')).is('completed_at', null), cnt(sb.from('threads')).eq('unread_admin', true)]);
+      st.badges = { leaves: b1.count || 0, ctr: b2.count || 0, msgs: b3.count || 0 };
+      const CTR_LIST = 'id,employee_id,title,created_at,emp_sig_at,admin_sig_at,completed_at';
+      if (p === 'dash') {
+        st.data.pendLeaves = await q(sb.from('leave_requests').select('*').eq('status', 'en attente').order('start_date'));
+        st.data.openWarn = await q(sb.from('warnings').select('id,employee_id,title,date').is('ack_at', null));
+        st.data.ctrs = await q(sb.from('contracts').select(CTR_LIST).is('completed_at', null));
+      }
+      if (p === 'emp') {
+        const id = st.view.id;
+        st.data.empWarn = await q(sb.from('warnings').select('*').eq('employee_id', id).order('date', { ascending: false }));
+        st.data.empCtr = await q(sb.from('contracts').select(CTR_LIST).eq('employee_id', id).order('created_at', { ascending: false }));
+        st.data.empLeaves = await q(sb.from('leave_requests').select('*').eq('employee_id', id).order('start_date', { ascending: false }));
+      }
+      if (p === 'leaves') {
+        const from = new Date(); from.setFullYear(from.getFullYear() - 1);
+        st.data.leaves = await q(sb.from('leave_requests').select('*').neq('status', 'annulée').gte('end_date', iso(from)).order('start_date'));
+        st.data.emps = await q(sb.from('employees').select('id,first_name,last_name,poste,magasin,active').order('last_name'));
+      }
+      if (p === 'contracts') {
+        st.data.ctrs = await q(sb.from('contracts').select(CTR_LIST).order('created_at', { ascending: false }));
+        st.data.tpls = await q(sb.from('contract_templates').select('*').order('position'));
+        st.data.settings = (await q(sb.from('app_settings').select('*')))[0] || {};
+        st.data.emps = await q(sb.from('employees').select('id,first_name,last_name,poste,magasin,active').order('last_name'));
+      }
+      if (p === 'msgs') {
+        st.data.threads = await q(sb.from('threads').select('*').order('last_at', { ascending: false }));
+        st.data.emps = await q(sb.from('employees').select('id,first_name,last_name,poste,magasin,active').order('last_name'));
+      }
+      if (p === 'mail') {
+        st.data.settings = (await q(sb.from('app_settings').select('*')))[0] || {};
+        st.data.mailLog = await q(sb.from('notify_log').select('*').order('at', { ascending: false }).limit(60));
+      }
       if (p === 'dash' || p === 'emps') {
         st.data.emps = await q(sb.from('employees').select('*').order('last_name'));
         st.data.infos = await q(sb.from('employee_info').select('employee_id,birth,street,city,postal,phone,email_perso,em_name,em_rel,em_phone'));
@@ -183,7 +246,16 @@ async function loadPage() {
       }
     } else {
       const id = st.me.id;
-      st.data.myInfo = (await q(sb.from('employee_info').select('*').eq('employee_id', id)))[0] || null;
+      const [r1, r2, r3, r4, r5] = await Promise.all([
+        sb.from('employee_info').select('*').eq('employee_id', id),
+        sb.from('warnings').select('*').eq('employee_id', id).order('date', { ascending: false }),
+        sb.from('contracts').select('id,title,created_at,emp_sig_at,admin_sig_at,completed_at').eq('employee_id', id).order('created_at', { ascending: false }),
+        sb.from('leave_requests').select('*').eq('employee_id', id).order('start_date', { ascending: false }),
+        sb.from('threads').select('*').eq('employee_id', id).order('last_at', { ascending: false }),
+      ]);
+      for (const r of [r1, r2, r3, r4, r5]) if (r.error) throw r.error;
+      st.data.myInfo = r1.data[0] || null; st.data.myWarn = r2.data; st.data.myCtr = r3.data; st.data.myLeaves = r4.data; st.data.myThreads = r5.data;
+      if (p === 'mcontract') st.data.myCtrFull = await q(sb.from('contracts').select('*').eq('employee_id', id).order('created_at', { ascending: false }));
       if (p === 'home') {
         st.data.hbMeta = (await q(sb.from('handbook_meta').select('*')))[0];
         st.data.hbSecs = await q(sb.from('handbook_sections').select('*').order('position'));
@@ -203,7 +275,7 @@ async function loadPage() {
 /* ---------- Pages administratrice ---------- */
 function adminPage() {
   if (st.loading) return loading();
-  switch (st.view.page) { case 'emps': return empsView(); case 'emp': return empDetail(); case 'handbook': return handbookAdmin(); case 'news': return newsAdmin(); default: return dashView(); }
+  switch (st.view.page) { case 'emps': return empsView(); case 'emp': return empDetail(); case 'handbook': return handbookAdmin(); case 'news': return newsAdmin(); case 'leaves': return leavesView(); case 'contracts': return contractsView(); case 'msgs': return adminMsgView(); case 'mail': return mailView(); default: return dashView(); }
 }
 const curRate = id => { const r = (st.data.rates || []).find(x => x.employee_id === id); return r ? r.rate : null; };
 function dashView() {
@@ -211,8 +283,12 @@ function dashView() {
   const inc = emps.filter(e => !infoDone(infos.find(i => i.employee_id === e.id)));
   const v = st.data.hbMeta?.version; const read = new Set((st.data.hbReads || []).filter(r => r.version === v).map(r => r.employee_id));
   const notRead = emps.filter(e => e.user_id && !read.has(e.id));
+  const b = st.badges || {}; const pl = st.data.pendLeaves || []; const ow = st.data.openWarn || [];
+  const empOf = id => (st.data.emps || []).find(e => e.id === id);
   return `<div class="spread"><div><p class="eyebrow">Administration</p><h1>Tableau de bord</h1></div></div>
-  <div class="tiles"><button class="tile" onclick="App.go('emps')"><b>${emps.length}</b><span>employés actifs</span></button><button class="tile${inc.length ? ' alert' : ''}" onclick="App.go('emps')"><b>${inc.length}</b><span>fiches d’embauche incomplètes</span></button><button class="tile${notRead.length ? ' alert' : ''}" onclick="App.go('handbook')"><b>${notRead.length}</b><span>n’ont pas lu le cahier</span></button></div>
+  <div class="tiles"><button class="tile" onclick="App.go('emps')"><b>${emps.length}</b><span>employés actifs</span></button><button class="tile${b.leaves ? ' alert' : ''}" onclick="App.go('leaves')"><b>${b.leaves || 0}</b><span>demandes de vacances à traiter</span></button><button class="tile${b.msgs ? ' alert' : ''}" onclick="App.go('msgs')"><b>${b.msgs || 0}</b><span>messages non lus</span></button><button class="tile${b.ctr ? ' alert' : ''}" onclick="App.go('contracts')"><b>${b.ctr || 0}</b><span>contrats à signer</span></button><button class="tile${inc.length ? ' alert' : ''}" onclick="App.go('emps')"><b>${inc.length}</b><span>fiches d’embauche incomplètes</span></button><button class="tile${notRead.length ? ' alert' : ''}" onclick="App.go('handbook')"><b>${notRead.length}</b><span>n’ont pas lu le cahier</span></button></div>
+  ${pl.length ? `<section class="section"><h2>Demandes de vacances à traiter</h2>${pendingList(pl.map(l => ({ ...l, emp: empOf(l.employee_id) })).filter(l => l.emp), [])}</section>` : ''}
+  ${ow.length ? `<section class="section"><h2>Avertissements pas encore confirmés</h2><div class="list">${ow.map(w => { const e = empOf(w.employee_id); return e ? `<div class="item"><div class="grow"><b>${esc(fullname(e))}</b><span class="muted small">${esc(w.title)} · ${fd(w.date)}</span></div><button class="btn sm" onclick="App.openEmp('${e.id}','warn')">Voir</button></div>` : ''; }).join('')}</div></section>` : ''}
   ${emps.length ? '' : `<section class="panel stack"><h2>Bienvenue dans ton espace</h2><p>Commence par ajouter tes employés. Chacun recevra un courriel pour choisir son mot de passe.</p><div><button class="btn primary" onclick="App.go('emps');setTimeout(()=>App.empForm(),50)">Ajouter un employé</button></div></section>`}
   ${inc.length ? `<section class="section"><h2>Fiches d’embauche incomplètes</h2><div class="list">${inc.map(e => `<div class="item"><div class="grow"><b>${esc(fullname(e))}</b><span class="muted small">${esc(e.poste)} · ${esc(e.magasin)}</span></div><button class="btn sm" onclick="App.openEmp('${e.id}')">Voir le dossier</button></div>`).join('')}</div></section>` : ''}`;
 }
@@ -231,8 +307,12 @@ function seniority(d) { const m = Math.max(0, Math.floor((new Date() - new Date(
 function empDetail() {
   const e = st.data.emp; if (!e) return `<div class="list"><p class="empty">Dossier introuvable.</p></div>`;
   const tab = st.view.tab || 'profil';
-  const tabs = [['profil', 'Profil'], ['fiche', 'Fiche d’embauche'], ['salaire', 'Salaire et avantages'], ['notes', 'Notes']];
+  const tabs = [['profil', 'Profil'], ['fiche', 'Fiche d’embauche'], ['contrat', 'Contrat'], ['salaire', 'Salaire et avantages'], ['warn', 'Avertissements'], ['conges', 'Congés'], ['notes', 'Notes']];
+  const flag = { contrat: (st.data.empCtr || []).some(c => !c.completed_at), warn: (st.data.empWarn || []).some(w => !w.ack_at), conges: (st.data.empLeaves || []).some(l => l.status === 'en attente') };
   let body = '';
+  if (tab === 'contrat') body = `<div class="spread"><p class="muted">${esc(e.first_name)} peut signer dans son espace, ou sur ton appareil quand tu lui présentes la plateforme.</p><button class="btn primary" onclick="App.contractForm('${e.id}')">Créer un contrat</button></div>${contractRows((st.data.empCtr || []).map(c => ({ c, e })), false, 'Aucun contrat pour cet employé.')}`;
+  if (tab === 'warn') body = `<div class="spread"><p class="muted">${esc(e.first_name)} doit confirmer avoir pris connaissance de chaque avertissement.</p><button class="btn primary" onclick="App.warnForm('${e.id}')">Émettre un avertissement</button></div>${warnList(st.data.empWarn, true)}`;
+  if (tab === 'conges') body = `<section class="section"><h2>Vacances et autres congés</h2>${leaveList((st.data.empLeaves || []).map(l => ({ ...l, emp: e })), true)}</section>`;
   if (tab === 'profil') body = `<div class="panel stack"><dl class="facts"><div><dt>Poste</dt><dd>${esc(e.poste) || '—'}</dd></div><div><dt>Magasin</dt><dd>${esc(e.magasin)}</dd></div><div><dt>Groupe de pourboire</dt><dd>${TIP_GROUPS[e.tip_group]}</dd></div><div><dt>Date d’embauche</dt><dd>${fd(e.start_date)}</dd></div><div><dt>Ancienneté</dt><dd>${seniority(e.start_date)}</dd></div><div><dt>Courriel de connexion</dt><dd>${esc(e.email)}</dd></div><div><dt>Statut</dt><dd>${e.active ? '<span class="pill p-ok">Actif</span>' : '<span class="pill p-mute">Inactif, ne peut plus se connecter</span>'}</dd></div></dl>
     <div class="row"><button class="btn" onclick="App.empForm('${e.id}')">Modifier le profil</button><button class="btn" onclick="App.resend('${e.id}')">Renvoyer l’invitation</button><button class="btn" onclick="App.toggleActive()">${e.active ? 'Désactiver l’accès' : 'Réactiver l’accès'}</button></div></div>`;
   if (tab === 'fiche') body = `<div class="panel">${infoForm(st.data.empInfo, 'admin')}</div>`;
@@ -240,7 +320,7 @@ function empDetail() {
   if (tab === 'notes') body = `<section class="panel stack"><div class="spread"><div><h2>Bloc-notes</h2><p class="small muted">Visible seulement par toi.</p></div><span id="nt-status" class="small muted">${st.data.empNotes ? 'Enregistré le ' + fdt(st.data.empNotes.updated_at) : 'Aucune note'}</span></div><textarea class="big" id="nt-text" oninput="App.noteInput(this.value)">${esc(st.data.empNotes?.notes || '')}</textarea><p class="small muted">Les notes s’enregistrent automatiquement.</p></section>`;
   return `<div><button class="btn ghost sm" onclick="App.go('emps')">← Tous les employés</button></div>
   <div class="spread"><div><p class="eyebrow">${esc(e.poste)} · ${esc(e.magasin)}</p><h1>${esc(fullname(e))}</h1></div>${e.active ? '' : '<span class="pill p-mute">Inactif</span>'}</div>
-  <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${tab === k}" onclick="App.tab('${k}')">${l}</button>`).join('')}</div>${body}`;
+  <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" aria-selected="${tab === k}" onclick="App.tab('${k}')">${l}${flag[k] ? ' <span class="count">!</span>' : ''}</button>`).join('')}</div>${body}`;
 }
 function salaryBlock(sal, perks, admin) {
   sal = sal || []; perks = perks || [];
@@ -294,14 +374,214 @@ function newsAdmin() {
     <div><button class="btn ghost sm" onclick="App.delNews('${n.id}')">Supprimer</button></div></article>`; }).join('') : '<div class="list"><p class="empty">Aucune nouvelle publiée.</p></div>'}</div>`;
 }
 
+/* ---------- Congés et calendriers ---------- */
+const empById = id => (st.data.emps || []).find(e => e.id === id);
+function conflicts(l, all) {
+  const others = all.filter(o => o.emp && o.emp.id !== l.emp.id && o.status === 'acceptée' && o.emp.magasin === l.emp.magasin && o.start_date <= l.end_date && o.end_date >= l.start_date);
+  return others.length ? `<span class="small" style="color:var(--warn)">Déjà absents (${esc(l.emp.magasin)}) pendant cette période : ${others.map(o => esc(o.emp.first_name)).join(', ')}</span>` : '';
+}
+const decideBtns = l => `<div class="row"><button class="btn sm ok" onclick="App.leaveDecide('${l.id}')">Accepter</button><button class="btn sm" onclick="App.proposeForm('${l.id}')">Proposer d’autres dates</button><button class="btn sm crit" onclick="App.refuseForm('${l.id}')">Refuser</button></div>`;
+function pendingList(pl, all) {
+  if (!pl.length) return '<div class="list"><p class="empty">Aucune demande en attente.</p></div>';
+  return `<div class="list">${pl.map(l => `<div class="item"><div class="grow"><b>${esc(fullname(l.emp))} <span class="muted small" style="font-weight:400">· ${esc(l.emp.magasin)}</span></b><span>${esc(l.type)} · ${range(l.start_date, l.end_date)} <span class="muted">(${nDays(l.start_date, l.end_date)} jours)</span></span>${l.note ? `<span class="muted small">« ${esc(l.note)} »</span>` : ''}${conflicts(l, all)}</div>${decideBtns(l)}</div>`).join('')}</div>`;
+}
+function leaveList(ls, admin) {
+  if (!ls.length) return `<div class="list"><p class="empty">Aucune demande de congé.</p></div>`;
+  return `<div class="list">${ls.map(l => {
+    let extra = '';
+    if (l.status === 'contre-proposition' && l.prop_start) extra = `<div class="banner acc" style="margin-top:8px"><div class="stack" style="gap:4px"><b>Dates proposées : ${range(l.prop_start, l.prop_end)} (${nDays(l.prop_start, l.prop_end)} jours)</b>${l.prop_msg ? `<span class="small">${esc(l.prop_msg)}</span>` : ''}</div>${admin ? '<span class="small muted">En attente de la réponse de l’employé</span>' : `<div class="row"><button class="btn sm primary" onclick="App.answerProposal('${l.id}',true)">Accepter ces dates</button><button class="btn sm" onclick="App.answerProposal('${l.id}',false)">Refuser</button></div>`}</div>`;
+    const acts = admin && l.status === 'en attente' ? decideBtns(l) : (!admin && l.status === 'en attente' ? `<button class="btn sm ghost" onclick="App.cancelLeave('${l.id}')">Annuler la demande</button>` : '');
+    return `<div class="item" style="display:grid;gap:4px"><div class="spread"><div class="grow"><b>${esc(l.type)} · ${range(l.start_date, l.end_date)}</b><span class="muted small">${nDays(l.start_date, l.end_date)} jours · demandé le ${fd(l.requested_at)}${l.note ? ` · « ${esc(l.note)} »` : ''}</span>${l.admin_msg ? `<span class="small">Réponse : ${esc(l.admin_msg)}</span>` : ''}</div><div class="row">${pill(l.status)}${acts}</div></div>${extra}</div>`;
+  }).join('')}</div>`;
+}
+function leavesView() {
+  const all = (st.data.leaves || []).map(l => ({ ...l, emp: empById(l.employee_id) })).filter(l => l.emp);
+  const pl = all.filter(l => l.status === 'en attente'), props = all.filter(l => l.status === 'contre-proposition');
+  return `<div class="spread"><div><p class="eyebrow">Administration</p><h1>Congés et vacances</h1></div></div>
+  <section class="section"><h2>À traiter</h2>${pendingList(pl, all)}</section>
+  ${props.length ? `<section class="section"><h2>En attente de la réponse de l’employé</h2><div class="list">${props.map(l => `<div class="item"><div class="grow"><b>${esc(fullname(l.emp))}</b><span class="small">Demandé : ${range(l.start_date, l.end_date)} · Proposé : <b>${range(l.prop_start, l.prop_end)}</b></span></div>${pill(l.status)}</div>`).join('')}</div></section>` : ''}
+  ${campaign(all)}
+  <section class="section">${calendar(all)}</section>`;
+}
+function campaign(all) {
+  const s = season(); const act = (st.data.emps || []).filter(e => e.active);
+  const done = act.filter(e => all.some(l => l.emp.id === e.id && l.type === 'Vacances' && l.start_date >= s.a && l.start_date <= s.b));
+  const miss = act.filter(e => !done.includes(e)); const pct = act.length ? Math.round(done.length / act.length * 100) : 0;
+  return `<section class="panel stack"><div class="spread"><h2>Vacances d’été ${s.y}</h2><span class="num"><b>${done.length}</b> sur ${act.length} employés ont fait leur demande</span></div><div class="bar" role="img" aria-label="${pct} %"><i style="width:${pct}%"></i></div>${miss.length ? `<div class="stack" style="gap:6px"><span class="small muted">N’ont pas encore fait de demande :</span><div class="chips">${miss.map(e => `<span class="chip">${esc(fullname(e))}</span>`).join('')}</div></div>` : '<p class="small" style="color:var(--ok)">Tout le monde a fait sa demande.</p>'}</section>`;
+}
+function calendar(all) {
+  const now = new Date(); const [y, m] = st.cal || [now.getFullYear(), now.getMonth()]; const n = new Date(y, m + 1, 0).getDate();
+  const first = `${y}-${pad(m + 1)}-01`, last = `${y}-${pad(m + 1)}-${pad(n)}`;
+  const span = l => l.status === 'contre-proposition' && l.prop_start ? [l.prop_start, l.prop_end] : [l.start_date, l.end_date];
+  const live = all.filter(l => ['acceptée', 'en attente', 'contre-proposition'].includes(l.status) && span(l)[0] <= last && span(l)[1] >= first);
+  const days = [...Array(n)].map((_, i) => { const d = new Date(y, m, i + 1); return { iso: iso(d), num: i + 1, wd: 'DLMMJVS'[d.getDay()], we: d.getDay() === 0 || d.getDay() === 6 }; });
+  const title = new Date(y, m, 1).toLocaleDateString('fr-CA', { month: 'long', year: 'numeric' });
+  const cls = { 'acceptée': 'c-ok', 'en attente': 'c-pend', 'contre-proposition': 'c-prop' };
+  return `<div class="spread"><h2>Calendriers des absences</h2><div class="row"><button class="btn sm" onclick="App.cal(-1)" aria-label="Mois précédent">←</button><b style="min-width:140px;text-align:center;text-transform:capitalize">${title}</b><button class="btn sm" onclick="App.cal(1)" aria-label="Mois suivant">→</button><button class="btn sm ghost" onclick="App.calTo()">Ce mois-ci</button><button class="btn sm ghost" onclick="App.calTo(${season().y},6)">Juillet ${season().y}</button></div></div>
+  <div class="legend"><span><i style="background:var(--ok)"></i>Accepté</span><span><i style="background:repeating-linear-gradient(45deg,var(--warn) 0 3px,transparent 3px 6px)"></i>En attente</span><span><i style="border:2px dashed var(--accent);border-left:0;border-right:0"></i>Dates proposées</span></div>
+  ${[['Production', 'Production'], ['Laval', 'Vente Laval'], ['Montréal', 'Vente Montréal']].map(([mag, label]) => {
+    const team = (st.data.emps || []).filter(e => e.active && e.magasin === mag);
+    const rows = team.map(e => ({ e, ls: live.filter(l => l.emp.id === e.id) })).filter(r => r.ls.length);
+    const counts = days.map(d => rows.filter(r => r.ls.some(l => l.status === 'acceptée' && l.start_date <= d.iso && l.end_date >= d.iso)).length);
+    return `<section class="stack" style="gap:8px"><h3 class="calh">${label} <span class="small muted" style="font-family:var(--body);font-weight:400">· ${team.length} employé${team.length > 1 ? 's' : ''}${rows.length ? ` · ${rows.length} avec une absence ce mois-ci` : ''}</span></h3>
+    ${rows.length ? `<div class="tablewrap"><table class="cal"><thead><tr><th class="name">Employé</th>${days.map(d => `<th class="${d.we ? 'we' : ''}">${d.wd}<br><span class="num">${d.num}</span></th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr><td class="name">${esc(fullname(r.e))}<br><span class="muted small" style="font-weight:400">${esc(r.e.poste)}</span></td>${days.map(d => { const l = r.ls.find(l => span(l)[0] <= d.iso && span(l)[1] >= d.iso); return `<td class="d ${l ? cls[l.status] : ''}" ${l ? `title="${esc(l.type)} · ${STATUS[l.status][1]}"` : ''}>${l ? '<i></i>' : ''}</td>`; }).join('')}</tr>`).join('')}</tbody><tfoot><tr><td class="name">Absents confirmés</td>${counts.map(c => `<td class="${c >= 2 ? 'hot' : ''}">${c || ''}</td>`).join('')}</tr></tfoot></table></div>` : `<div class="list"><p class="empty">Personne n’est absent ce mois-ci.</p></div>`}</section>`;
+  }).join('')}
+  <p class="small muted">Le nombre d’absents s’affiche en rouge quand 2 personnes ou plus de la même équipe sont absentes le même jour.</p>`;
+}
+
+/* ---------- Avertissements ---------- */
+function warnList(ws, admin) {
+  ws = ws || []; if (!ws.length) return `<div class="list"><p class="empty">Aucun avertissement au dossier.</p></div>`;
+  return `<div class="stack">${ws.map(w => `<article class="warncard${w.ack_at ? '' : ' open'}"><div class="spread"><div><span class="eyebrow">Avertissement ${esc(w.level.toLowerCase())} · ${fd(w.date)}</span><h3>${esc(w.title)}</h3></div>${w.ack_at ? `<span class="pill p-ok">Lu et confirmé le ${fd(w.ack_at)}</span>` : '<span class="pill p-crit">Pas encore confirmé</span>'}</div><p class="body">${esc(w.body)}</p>
+  ${w.comment ? `<p class="small"><span class="muted">Commentaire de l’employé :</span> ${esc(w.comment)}</p>` : ''}
+  ${!admin && !w.ack_at ? `<form class="stack" onsubmit="App.ack(event,'${w.id}')"><label>Commentaire (facultatif)<textarea name="comment" placeholder="Tu peux ajouter ta version des faits."></textarea></label><div><button class="btn primary">J’ai pris connaissance de cet avertissement</button></div><p class="small muted">Confirmer veut dire que tu l’as lu, pas que tu es d’accord.</p></form>` : ''}
+  ${admin ? `<div><button class="btn ghost sm" onclick="App.delWarn('${w.id}')">Retirer du dossier</button></div>` : ''}</article>`).join('')}</div>`;
+}
+
+/* ---------- Contrats ---------- */
+function cPill(c, forEmp) {
+  if (c.completed_at) return '<span class="pill p-ok">Signé par les deux parties</span>';
+  if (c.emp_sig_at) return `<span class="pill p-warn">${forEmp ? 'En attente de l’employeur' : 'Attend ta signature'}</span>`;
+  if (c.admin_sig_at) return `<span class="pill p-acc">${forEmp ? 'À signer' : 'Attend la signature de l’employé'}</span>`;
+  return `<span class="pill p-acc">${forEmp ? 'À signer' : 'À signer par les deux'}</span>`;
+}
+function contractRows(list, showName, emptyText) {
+  if (!list.length) return `<div class="list"><p class="empty">${emptyText || 'Aucun contrat.'}</p></div>`;
+  return `<div class="list">${list.map(({ c, e }) => `<div class="item"><div class="grow"><b>${showName ? esc(fullname(e)) : esc(c.title)}</b><span class="muted small">${showName ? esc(c.title) + ' · ' : ''}préparé le ${fd(c.created_at)}${c.completed_at ? ` · signé le ${fd(c.completed_at)}` : ''}</span></div><div class="row">${cPill(c, false)}<button class="btn sm" onclick="App.viewContract('${c.id}')">Ouvrir</button></div></div>`).join('')}</div>`;
+}
+function contractText(body) {
+  return esc(body).split('\n').map((ln, i) => {
+    const t = ln.trim(); if (i === 0) return `<span class="ct">${ln}</span>`; if (i === 1 && t) return `<span class="cst">${ln}</span>`;
+    if (/^(\d+\.\s+[^a-z]+|PRÉAMBULE|ENTRE|ET|LES PARTIES CONVIENNENT DE CE QUI SUIT :)$/.test(t)) return `<b class="ch">${ln}</b>`;
+    return ln.replace(/^(\d+\.\d+\s(?:[A-ZÀ-Ü][\wÀ-ÿ’' -]{2,30}\.)?)/, m => `<b>${m}</b>`);
+  }).join('\n');
+}
+const companyOf = body => (String(body).match(/\nENTRE\n([^\n]+?), ayant/) || [])[1] || 'Marius & Fanny';
+function contractDoc(c, empName, company, mode) {
+  const block = who => {
+    const s = who === 'emp' ? (c.emp_sig_at && { name: c.emp_sig_name, img: c.emp_sig_img, at: c.emp_sig_at, how: c.emp_sig_how }) : (c.admin_sig_at && { name: c.admin_sig_name, img: c.admin_sig_img, at: c.admin_sig_at });
+    const label = who === 'emp' ? `L’Employé(e) : ${esc(empName)}` : `Pour l’Employeur : ${esc(company)}`;
+    let action = '';
+    if (!s && mode !== 'print') {
+      if (mode === 'admin') action = who === 'emp' ? `<button class="btn sm" onclick="App.signForm('${c.id}','emp')">Faire signer l’employé sur cet appareil</button>` : `<button class="btn sm primary" onclick="App.signForm('${c.id}','admin')">Signer comme employeur</button>`;
+      else action = who === 'emp' ? `<button class="btn primary" onclick="App.signForm('${c.id}','emp')">Signer mon contrat</button>` : '<span class="sigmeta">En attente de la signature de l’employeur</span>';
+    }
+    return `<div class="sigblock"><div class="sigline">${s ? `<img src="${esc(s.img)}" alt="Signature de ${esc(s.name)}">` : ''}</div><span class="sigmeta">${label}</span>${s ? `<span class="sigmeta">Signé par ${esc(s.name)} le ${fdt(s.at)}${s.how ? ` · ${esc(s.how)}` : ''}</span>` : action}</div>`;
+  };
+  return `<article class="paper"><div class="ctext">${contractText(c.body)}</div><div class="sigs">${block('emp')}${block('admin')}</div>${c.body_sha256 ? `<p class="sigmeta" style="overflow-wrap:anywhere">Empreinte numérique du texte (SHA-256) : ${esc(c.body_sha256)}</p>` : ''}</article>`;
+}
+function contractsView() {
+  const ctrs = st.data.ctrs || [], S = st.data.settings || {};
+  const withE = l => l.map(c => ({ c, e: empById(c.employee_id) })).filter(x => x.e);
+  const open = withE(ctrs.filter(c => !c.completed_at)), done = withE(ctrs.filter(c => c.completed_at));
+  return `<div class="spread"><div><p class="eyebrow">Employés</p><h1>Contrats de travail</h1></div><button class="btn primary" onclick="App.contractForm()">Créer un contrat</button></div>
+  <section class="section"><h2>À compléter</h2>${contractRows(open, true, 'Tous les contrats sont signés.')}</section>
+  <section class="section"><h2>Contrats signés</h2>${contractRows(done, true, 'Aucun contrat signé pour le moment.')}</section>
+  <section class="section"><h2>Renseignements de l’employeur</h2>
+  <form class="panel stack" onsubmit="App.saveCompany(event)"><p class="small muted">Ils remplissent automatiquement l’en-tête et la clause de signature de chaque nouveau contrat.</p>
+  <div class="two"><label>Nom légal de l’entreprise<input name="company" required value="${esc(S.company)}"></label><label>Adresse du principal établissement<input name="company_address" required placeholder="1234 rue Principale, Laval (Québec) H7A 1A1" value="${esc(S.company_address)}"></label>
+  <label>Représentant(e) qui signe<input name="company_rep" required placeholder="Prénom Nom" value="${esc(S.company_rep)}"></label><label>Titre<input name="company_rep_title" required placeholder="Ex. présidente" value="${esc(S.company_rep_title)}"></label>
+  <label>Ville de signature<input name="company_city" required value="${esc(S.company_city)}"></label></div>
+  <div class="stack" style="gap:8px"><h3>Adresses des établissements</h3><p class="small muted">Le contrat indique l’adresse de l’établissement inscrit dans le profil de l’employé.</p>
+  <div class="two"><label>Magasin de Laval<input name="store_laval" placeholder="Ex. 1234 boulevard Saint-Martin, Laval (Québec) H7A 1A1" value="${esc(S.store_laval)}"></label><label>Magasin de Montréal<input name="store_mtl" placeholder="Ex. 567 rue Saint-Denis, Montréal (Québec) H2X 1A1" value="${esc(S.store_mtl)}"></label>
+  <label>Atelier de production (si différent du magasin de Laval)<input name="store_prod" placeholder="Laissé vide : adresse du magasin de Laval" value="${esc(S.store_prod)}"></label></div></div><div><button class="btn primary">Enregistrer</button></div></form></section>
+  <section class="section"><div class="spread"><h2>Modèles de contrat</h2><button class="btn" onclick="App.tplForm()">Nouveau modèle</button></div>
+  <div class="tplgrid">${(st.data.tpls || []).map(t => `<div class="tpl"><span class="eyebrow">${esc(t.poste)}</span><h3>${esc(t.title)}</h3><div class="row"><button class="btn sm" onclick="App.tplForm('${t.id}')">Modifier le texte</button></div></div>`).join('')}</div>
+  <p class="small muted">Fais valider ces modèles par un conseiller juridique ou en ressources humaines avant de les utiliser avec tes employés. Modifier un modèle ne change pas les contrats déjà créés.</p></section>`;
+}
+function guessTpl(e, tpls) { const p = slug(e.poste); const k = TPL_KEYS.find(([s]) => p.includes(s)); return (k && tpls.find(t => t.poste === k[1])) || tpls[0]; }
+function fillContract(e, info, S, tpl, o) {
+  const adrL = e.magasin === 'Production' ? (S.store_prod || S.store_laval) : e.magasin === 'Montréal' ? S.store_mtl : S.store_laval;
+  const adrLieu = adrL || `[adresse ${e.magasin === 'Production' ? 'de l’atelier de production' : 'du magasin de ' + e.magasin}]`;
+  const lieu = (e.magasin === 'Production' ? 'à l’atelier de production de Laval' : `au magasin de ${e.magasin}`) + `, situé au ${adrLieu}`;
+  const i = info; const adrE = i && i.street ? `${i.street}${i.apt ? ', app. ' + i.apt : ''}, ${i.city} (${i.province || 'QC'}) ${fmtPostal(i.postal)}` : '[adresse de l’employé — fiche d’embauche à remplir]';
+  const v = { adresse_lieu: adrLieu, adresse_entreprise: S.company_address || '[adresse de l’entreprise]', representant: S.company_rep || '[nom du représentant]', titre_representant: S.company_rep_title || '[titre]', ville: S.company_city || '[ville]', adresse_employe: adrE, entreprise: S.company || 'Marius & Fanny', prenom: e.first_name, nom: e.last_name, poste: String(e.poste || '').toLowerCase(), lieu, magasin: e.magasin, date_debut: fd(o.date_debut), statut: o.statut.toLowerCase(), heures: o.heures, taux: money(o.taux), essai: o.essai, date_contrat: fd(TODAY) };
+  return tpl.body.replace(/\{\{(\w+)\}\}/g, (m, k) => v[k] !== undefined ? v[k] : m);
+}
+let sigPad = null;
+function initPad() {
+  const c = document.getElementById('pad'); if (!c) return; const dpr = window.devicePixelRatio || 1; const r = c.getBoundingClientRect();
+  c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr); const x = c.getContext('2d'); x.scale(dpr, dpr);
+  x.lineWidth = 2.4; x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#1E2A21'; sigPad = { c, x, drawn: false, down: false };
+  const pos = ev => { const b = c.getBoundingClientRect(); return [ev.clientX - b.left, ev.clientY - b.top]; };
+  c.addEventListener('pointerdown', ev => { ev.preventDefault(); sigPad.down = true; try { c.setPointerCapture(ev.pointerId); } catch (_) {} const [a, b] = pos(ev); x.beginPath(); x.moveTo(a, b); x.lineTo(a + .1, b + .1); x.stroke(); sigPad.drawn = true; $('#sg-err').hidden = true; });
+  c.addEventListener('pointermove', ev => { if (!sigPad.down) return; const [a, b] = pos(ev); x.lineTo(a, b); x.stroke(); });
+  const up = () => { sigPad.down = false; }; c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
+}
+// Signature réduite (fond blanc, largeur 600 px) pour garder le contrat léger
+function sigImage() { const src = sigPad.c, w = Math.min(600, src.width), h = Math.round(src.height * w / src.width); const o = document.createElement('canvas'); o.width = w; o.height = h; const g = o.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(src, 0, 0, w, h); return o.toDataURL('image/png'); }
+
+/* ---------- Messages ---------- */
+function bubble(m, mine) { return `<div class="bub ${mine ? 'me' : ''}"><div class="bubtxt">${esc(m.body)}</div><span class="small muted">${m.from_admin ? 'La direction' : 'Employé'} · ${fdt(m.created_at)}</span></div>`; }
+function threadView(t, msgs, role) {
+  const who = role === 'admin' ? fullname(empById(t.employee_id)) || 'Ancien employé' : '';
+  return `<div class="stack"><div><span class="pill ${MSG_PILL[t.type]}">${MSG_TYPES[t.type]}</span> ${t.status === 'fermé' ? '<span class="pill p-mute">Fermé</span>' : ''}${role === 'admin' ? `<p class="small muted" style="margin-top:6px">De ${esc(who)} · ${fdt(t.created_at)}</p>` : ''}</div>
+  <div class="thread">${msgs.map(m => bubble(m, (role === 'admin') === m.from_admin)).join('')}</div>
+  ${t.status === 'fermé' ? `<p class="small muted">Cette conversation est fermée.</p>${role === 'admin' ? `<div><button class="btn sm" onclick="App.msgClose('${t.id}',false)">Rouvrir</button></div>` : ''}` :
+    `<form class="stack" onsubmit="App.msgReply(event,'${t.id}')"><label>${role === 'admin' ? 'Ta réponse' : 'Ajouter un message'}<textarea name="text" required maxlength="5000" placeholder="${role === 'admin' ? `Écris ta réponse. ${esc(who.split(' ')[0])} recevra un courriel.` : 'Écris ton message.'}"></textarea></label><div class="row"><button class="btn primary">Envoyer</button>${role === 'admin' ? `<button type="button" class="btn ghost" onclick="App.msgClose('${t.id}',true)">Fermer la conversation</button>` : ''}</div></form>`}</div>`;
+}
+function adminMsgView() {
+  const f = st.msgFilter || 'ouverts'; const all = st.data.threads || [];
+  const list = all.filter(t => f === 'tous' || (f === 'ouverts' ? t.status !== 'fermé' : t.status === 'fermé')); const unread = all.filter(t => t.unread_admin).length;
+  return `<div><p class="eyebrow">Communication</p><h1>Messages</h1></div>
+  <div class="tabs" role="tablist">${[['ouverts', 'Ouverts'], ['fermés', 'Fermés'], ['tous', 'Tous']].map(([k, l]) => `<button role="tab" aria-selected="${f === k}" onclick="App.msgTab('${k}')">${l}${k === 'ouverts' && unread ? ` <span class="count">${unread}</span>` : ''}</button>`).join('')}</div>
+  ${list.length ? `<div class="list">${list.map(t => `<button class="item msgrow${t.unread_admin ? ' unread' : ''}" onclick="App.msgOpen('${t.id}')"><div class="grow"><b>${t.unread_admin ? '<span class="dot"></span>' : ''}${esc(t.subject)}</b><span class="small muted">${esc(fullname(empById(t.employee_id)) || 'Ancien employé')}</span></div><div class="row"><span class="pill ${MSG_PILL[t.type]}">${MSG_TYPES[t.type]}</span><span class="small muted">${fs(t.last_at)}</span></div></button>`).join('')}</div>` : '<div class="list"><p class="empty">Aucun message.</p></div>'}`;
+}
+function empMsgView() {
+  const ts = st.data.myThreads || [];
+  return `<div class="stack" style="gap:6px"><p class="eyebrow">Messages</p><h1>Messages</h1><p class="muted">Une suggestion, une demande spéciale ou quelque chose à dire à la direction? Écris-le ici. Tu recevras un courriel quand on te répond.</p></div>
+  <form class="panel stack" onsubmit="App.msgNew(event)"><h2>Nouveau message</h2>
+  <div class="two"><label>Type<select name="type">${Object.entries(MSG_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label><label>Sujet<input name="subject" required maxlength="140" placeholder="Ex. Idée pour la vitrine"></label></div>
+  <label>Message<textarea name="text" required maxlength="5000"></textarea></label>
+  <div><button class="btn primary">Envoyer</button></div></form>
+  <section class="section"><h2>Mes conversations</h2>${ts.length ? `<div class="list">${ts.map(t => `<button class="item msgrow${t.unread_emp ? ' unread' : ''}" onclick="App.msgOpen('${t.id}')"><div class="grow"><b>${t.unread_emp ? '<span class="dot"></span>' : ''}${esc(t.subject)}</b><span class="small muted">${MSG_TYPES[t.type]}</span></div><div class="row">${t.status === 'fermé' ? '<span class="pill p-mute">Fermé</span>' : t.unread_emp ? '<span class="pill p-acc">Nouvelle réponse</span>' : ''}<span class="small muted">${fs(t.last_at)}</span></div></button>`).join('')}</div>` : '<div class="list"><p class="empty">Aucune conversation pour le moment.</p></div>'}</section>`;
+}
+
+/* ---------- Courriels ---------- */
+function mailView() {
+  const S = st.data.settings || {}, off = S.mail_off || [], log = st.data.mailLog || [];
+  return `<div><p class="eyebrow">Communication</p><h1>Avis par courriel</h1></div>
+  <form class="panel stack" onsubmit="App.mailSettings(event)"><h2>Réglages</h2>
+  <label style="max-width:420px">Courriel où tu reçois les avis de la direction<input type="email" name="notify_email" placeholder="Laisse vide : ton courriel de connexion" value="${esc(S.notify_email)}"></label>
+  <div class="two">${[['emp', 'Envoyés aux employés'], ['adm', 'Envoyés à toi']].map(([g, t]) => `<div class="stack" style="gap:8px"><span class="eyebrow">${t}</span>${Object.entries(MAIL_KINDS).filter(([, v]) => v[1] === g).map(([k, v]) => `<label class="check"><input type="checkbox" name="k_${k}" ${off.includes(k) ? '' : 'checked'}><span>${v[0]}</span></label>`).join('')}</div>`).join('')}</div>
+  <div><button class="btn primary">Enregistrer</button></div></form>
+  <section class="section"><h2>Derniers courriels envoyés</h2>${log.length ? `<div class="list">${log.map(m => `<div class="mail" style="cursor:default"><span class="spread"><b>${esc(m.subject)}</b><span class="small muted num">${fdt(m.at)}</span></span><span class="small muted">À : ${esc(m.to_addr)} · ${esc(MAIL_KINDS[m.kind]?.[0] || m.kind)}${m.ok ? '' : ` · <span style="color:var(--crit)">échec de l’envoi</span>`}</span></div>`).join('')}</div>` : '<div class="list"><p class="empty">Aucun courriel envoyé pour le moment.</p></div>'}</section>
+  <section class="panel stack"><h2>Ce que contiennent les courriels</h2><ul class="plain"><li>Les courriels disent seulement qu’il y a du nouveau et invitent à se connecter. Ils ne contiennent jamais le texte d’un avertissement, un salaire ou un renseignement confidentiel.</li><li>Ils sont envoyés à l’adresse personnelle inscrite dans la fiche d’embauche, ou à défaut au courriel de connexion.</li><li>Les invitations et les liens de mot de passe sont envoyés séparément par le système de connexion.</li></ul></section>`;
+}
+
 /* ---------- Pages employé ---------- */
 function empPage() {
   if (st.loading) return loading();
-  switch (st.view.page) { case 'minfo': return myInfoView(); case 'msal': return `<div><p class="eyebrow">Mon dossier</p><h1>Salaire et avantages</h1></div>${salaryBlock(st.data.mySal, st.data.myPerks, false)}`; case 'macct': return accountView(); default: return homeView(); }
+  switch (st.view.page) {
+    case 'minfo': return myInfoView(); case 'msal': return `<div><p class="eyebrow">Mon dossier</p><h1>Salaire et avantages</h1></div>${salaryBlock(st.data.mySal, st.data.myPerks, false)}`; case 'macct': return accountView();
+    case 'mcontract': return myContracts(); case 'mwarn': return `<div class="stack" style="gap:6px"><p class="eyebrow">Mon dossier</p><h1>Avertissements</h1><p class="muted">Tu dois confirmer avoir pris connaissance de chaque avertissement.</p></div>${warnList(st.data.myWarn, false)}`;
+    case 'mleave': return myLeaves(); case 'mmsg': return empMsgView(); default: return homeView();
+  }
+}
+function myLeaves() {
+  return `<div><p class="eyebrow">Mes congés</p><h1>Mes congés</h1></div>
+  <form class="panel stack" onsubmit="App.requestLeave(event)"><h2>Demander des vacances</h2>
+  <div class="two"><label>Type<select name="type"><option>Vacances</option><option>Congé personnel</option><option>Congé férié reporté</option><option>Autre</option></select></label><span></span>
+  <label>Du<input type="date" name="start" required min="${TODAY}"></label><label>Au<input type="date" name="end" required min="${TODAY}"></label></div>
+  <label>Note pour ta gestionnaire (facultatif)<input name="note" maxlength="300" placeholder="Ex. demande de date pour réserver mon voyage"></label><p id="lv-err" class="err" hidden></p><div><button class="btn primary">Envoyer la demande</button></div></form>
+  <section class="section"><h2>Mes demandes</h2>${leaveList((st.data.myLeaves || []).filter(l => l.status !== 'annulée'), false)}</section>`;
+}
+function myContracts() {
+  const cs = st.data.myCtrFull || [];
+  return `<div class="stack" style="gap:6px"><p class="eyebrow">Mon dossier</p><h1>Mon contrat de travail</h1><p class="muted">Lis ton contrat attentivement. Si tu as une question, parles-en à ta gestionnaire avant de signer.</p></div>
+  ${cs.length ? cs.map(c => `<section class="section"><div class="spread"><h2>${esc(c.title)}</h2><div class="row">${cPill(c, true)}<button class="btn sm" onclick="App.printContract('${c.id}')">Imprimer ou PDF</button></div></div>${contractDoc(c, fullname(st.me), companyOf(c.body), 'emp')}</section>`).join('') : '<div class="list"><p class="empty">Aucun contrat pour le moment.</p></div>'}`;
 }
 function homeView() {
   const e = st.me; const news = (st.data.news || []).filter(n => n.until > TODAY);
+  const d = st.data; const w = (d.myWarn || []).filter(x => !x.ack_at); const props = (d.myLeaves || []).filter(l => l.status === 'contre-proposition' && l.prop_start);
+  const decided = (d.myLeaves || []).filter(l => !l.seen && ['acceptée', 'refusée'].includes(l.status)); const unread = (d.myThreads || []).filter(t => t.unread_emp).length;
+  const toSign = (d.myCtr || []).some(c => !c.emp_sig_at);
   return `<div><p class="eyebrow">${new Date().toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><h1>Bonjour ${esc(e.first_name)}</h1><p class="muted">Membre de l’équipe depuis ${seniority(e.start_date)}</p></div>
+  ${w.length ? `<div class="banner crit"><div><b>Tu as ${w.length === 1 ? 'un avertissement' : w.length + ' avertissements'} à lire.</b><br><span class="small">Tu dois confirmer en avoir pris connaissance.</span></div><button class="btn primary" onclick="App.go('mwarn')">Lire maintenant</button></div>` : ''}
+  ${props.length ? `<div class="banner acc"><div><b>D’autres dates de vacances te sont proposées.</b><br><span class="small">${range(props[0].prop_start, props[0].prop_end)}</span></div><button class="btn" onclick="App.go('mleave')">Répondre</button></div>` : ''}
+  ${decided.map(l => `<div class="banner ${l.status === 'refusée' ? 'crit' : 'acc'}" style="${l.status === 'acceptée' ? 'background:var(--ok-soft);border-color:var(--ok)' : ''}"><div class="stack" style="gap:2px"><b>${l.status === 'acceptée' ? 'Ta demande de vacances est acceptée.' : 'Ta demande de vacances est refusée.'}</b><span class="small">${esc(l.type)} · ${range(l.start_date, l.end_date)}</span>${l.admin_msg ? `<span class="small">Message de la direction : « ${esc(l.admin_msg)} »</span>` : ''}${l.status === 'refusée' ? '<span class="small">Tu peux faire une nouvelle demande à d’autres dates.</span>' : ''}</div><div class="row"><button class="btn primary" onclick="App.go('mleave')">Voir mes congés</button><button class="btn" onclick="App.leaveSeen('${l.id}')">OK, compris</button></div></div>`).join('')}
+  ${unread ? `<div class="banner acc"><div><b>La direction t’a répondu.</b><br><span class="small">${unread} conversation${unread > 1 ? 's' : ''} avec une nouvelle réponse.</span></div><button class="btn primary" onclick="App.go('mmsg')">Lire</button></div>` : ''}
+  ${toSign ? `<div class="banner acc"><div><b>Ton contrat de travail est prêt.</b><br><span class="small">Lis-le et signe-le électroniquement.</span></div><button class="btn primary" onclick="App.go('mcontract')">Voir mon contrat</button></div>` : ''}
   ${!infoDone(st.data.myInfo) ? `<div class="banner acc"><div><b>Remplis ta fiche d’embauche.</b><br><span class="small">Adresse, téléphone, date de naissance et personne à joindre en cas d’urgence.</span></div><button class="btn primary" onclick="App.go('minfo')">Remplir ma fiche</button></div>` : ''}
   ${handbookBlock(teamOf(e), false)}
   <section class="section"><h2>Nouvelles</h2><div class="news">${news.length ? news.map(n => { const a = (st.data.myRsvp || []).find(r => r.news_id === n.id)?.answer; const closed = n.rsvp_due && n.rsvp_due < TODAY;
@@ -410,9 +690,154 @@ const App = {
   newsForm() { const d = new Date(); d.setDate(d.getDate() + 30);
     modal('Publier une nouvelle', `<form class="stack" onsubmit="App.saveNews(event)"><label>Titre<input name="title" required></label><label>Message<textarea name="body" required></textarea></label><label style="max-width:260px">Afficher jusqu’au<input type="date" name="until" required value="${iso(d)}"></label>
     <div class="panel stack" style="background:var(--blue);border:0;padding:14px"><label class="check"><input type="checkbox" name="rsvp" onchange="this.form.querySelector('.due').hidden=!this.checked"><span><b>Demander aux employés s’ils participent</b></span></label><label class="due" hidden style="max-width:240px">Répondre avant le (facultatif)<input type="date" name="rsvp_due"></label></div>
+    <label class="check"><input type="checkbox" name="mail" checked><span>Envoyer un courriel aux employés pour les aviser</span></label>
     <div class="row"><button class="btn primary">Publier</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`); },
-  async saveNews(ev) { const f = formData(ev); try { await q(sb.from('news').insert({ title: f.title.trim(), body: f.body, until: f.until, rsvp: !!f.rsvp, rsvp_due: f.rsvp && f.rsvp_due ? f.rsvp_due : null })); closeModal(); toast('Nouvelle publiée.'); await loadPage(); } catch (e) { fail(e); } },
+  async saveNews(ev) { const f = formData(ev); try { const n = await q(sb.from('news').insert({ date: TODAY, title: f.title.trim(), body: f.body, until: f.until, rsvp: !!f.rsvp, rsvp_due: f.rsvp && f.rsvp_due ? f.rsvp_due : null }).select('id').single()); if (f.mail) notify('news', n.id); closeModal(); toast(f.mail ? 'Nouvelle publiée. Les employés recevront un courriel.' : 'Nouvelle publiée.'); await loadPage(); } catch (e) { fail(e); } },
   async delNews(id) { try { await q(sb.from('news').delete().eq('id', id)); toast('Nouvelle supprimée.'); await loadPage(); } catch (e) { fail(e); } },
+  /* Congés */
+  cal(d) { const now = new Date(); const [y, m] = st.cal || [now.getFullYear(), now.getMonth()]; const x = new Date(y, m + d, 1); st.cal = [x.getFullYear(), x.getMonth()]; render(); },
+  calTo(y, m) { st.cal = y === undefined ? null : [y, m]; render(); },
+  findLeave(id) { return [...(st.data.leaves || []), ...(st.data.empLeaves || []), ...(st.data.pendLeaves || [])].find(l => l.id === id); },
+  async leaveDecide(id) { try { await q(sb.from('leave_requests').update({ status: 'acceptée', decided_at: new Date().toISOString(), seen: false, admin_msg: '' }).eq('id', id)); notify('leave_answer', id); toast('Congé accepté.'); await loadPage(); } catch (e) { fail(e); } },
+  proposeForm(id) { const l = App.findLeave(id); if (!l) return; const e = empById(l.employee_id) || st.data.emp;
+    modal('Proposer d’autres dates', `<form class="stack" onsubmit="App.savePropose(event,'${id}')"><p class="muted">${esc(fullname(e))} a demandé du ${range(l.start_date, l.end_date)}.</p><div class="two"><label>Du<input type="date" name="start" required value="${l.start_date}"></label><label>Au<input type="date" name="end" required value="${l.end_date}"></label></div><label>Message<textarea name="msg" placeholder="Explique pourquoi tu proposes ces dates."></textarea></label><p id="pp-err" class="err" hidden></p><div class="row"><button class="btn primary">Envoyer la proposition</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`); },
+  async savePropose(ev, id) { const f = formData(ev); if (f.end < f.start) { const er = $('#pp-err'); er.textContent = 'La date de fin doit suivre la date de début.'; er.hidden = false; return; }
+    try { await q(sb.from('leave_requests').update({ status: 'contre-proposition', prop_start: f.start, prop_end: f.end, prop_msg: f.msg.trim(), seen: false }).eq('id', id)); notify('leave_answer', id); closeModal(); toast('Proposition envoyée.'); await loadPage(); } catch (e) { fail(e); } },
+  refuseForm(id) { const l = App.findLeave(id); if (!l) return; const e = empById(l.employee_id) || st.data.emp;
+    modal('Refuser la demande', `<form class="stack" onsubmit="App.saveRefuse(event,'${id}')"><p class="muted">${esc(fullname(e))} · ${esc(l.type)} du ${range(l.start_date, l.end_date)}</p><label>Message pour ${esc(e.first_name)} (facultatif)<textarea name="msg" placeholder="Ex. Trop de collègues du même magasin sont déjà absents cette semaine-là."></textarea></label><p class="small muted">${esc(e.first_name)} verra la réponse et ce message sur sa page d’accueil.</p><div class="row"><button class="btn primary" style="background:var(--crit);border-color:var(--crit)">Refuser la demande</button><button type="button" class="btn" onclick="App.close();App.proposeForm('${id}')">Proposer d’autres dates plutôt</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`); },
+  async saveRefuse(ev, id) { const f = formData(ev); try { await q(sb.from('leave_requests').update({ status: 'refusée', admin_msg: f.msg.trim(), decided_at: new Date().toISOString(), seen: false }).eq('id', id)); notify('leave_answer', id); closeModal(); toast('Demande refusée. L’employé le verra sur sa page d’accueil.'); await loadPage(); } catch (e) { fail(e); } },
+  async requestLeave(ev) { const f = formData(ev); const er = $('#lv-err'); if (f.end < f.start) { er.textContent = 'La date de fin doit suivre la date de début.'; er.hidden = false; return; }
+    try { const r = await q(sb.from('leave_requests').insert({ employee_id: st.me.id, type: f.type, start_date: f.start, end_date: f.end, note: f.note.trim() }).select('id').single()); notify('leave_request', r.id); toast('Demande envoyée.'); await loadPage(); } catch (e) { er.textContent = errMsg(e); er.hidden = false; } },
+  async cancelLeave(id) { try { await q(sb.rpc('leave_cancel', { p_id: id })); toast('Demande annulée.'); await loadPage(); } catch (e) { fail(e); } },
+  async answerProposal(id, yes) { try { await q(sb.rpc('leave_answer', { p_id: id, p_accept: yes })); toast(yes ? 'Vacances confirmées.' : 'Réponse envoyée.'); await loadPage(); } catch (e) { fail(e); } },
+  async leaveSeen(id) { try { await q(sb.rpc('leave_seen', { p_id: id })); await loadPage(); } catch (e) { fail(e); } },
+
+  /* Avertissements */
+  warnForm(eid) { const e = st.data.emp;
+    modal('Émettre un avertissement', `<form class="stack" onsubmit="App.saveWarn(event,'${eid}')"><p class="muted">À : <b>${esc(fullname(e))}</b></p><div class="two"><label>Type<select name="level">${WARN_LEVELS.map(x => `<option>${x}</option>`).join('')}</select></label><label>Date<input type="date" name="date" required value="${TODAY}"></label></div><label>Objet<input name="title" required placeholder="Ex. retards répétés"></label><label>Description des faits et attentes<textarea name="body" required></textarea></label><p class="small muted">${esc(e.first_name)} le verra dans son espace et devra confirmer en avoir pris connaissance.</p><div class="row"><button class="btn primary">Envoyer l’avertissement</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`); },
+  async saveWarn(ev, eid) { const f = formData(ev); try { const r = await q(sb.from('warnings').insert({ employee_id: eid, date: f.date, level: f.level, title: f.title.trim(), body: f.body.trim() }).select('id').single()); notify('warning', r.id); closeModal(); toast('Avertissement envoyé.'); await loadPage(); } catch (e) { fail(e); } },
+  async delWarn(id) { if (!confirm('Retirer cet avertissement du dossier?')) return; try { await q(sb.from('warnings').delete().eq('id', id)); toast('Avertissement retiré.'); await loadPage(); } catch (e) { fail(e); } },
+  async ack(ev, id) { const f = formData(ev); try { await q(sb.rpc('warning_ack', { p_id: id, p_comment: f.comment || '' })); toast('Confirmation envoyée.'); await loadPage(); } catch (e) { fail(e); } },
+
+  /* Contrats */
+  async contractForm(eid) {
+    try {
+      if (!st.data.tpls) st.data.tpls = await q(sb.from('contract_templates').select('*').order('position'));
+      const emps = await q(sb.from('employees').select('id,first_name,last_name,poste,magasin,active,start_date').eq('active', true).order('last_name'));
+      const e = eid ? emps.find(x => x.id === eid) : null; const t0 = e ? guessTpl(e, st.data.tpls) : null;
+      modal('Créer un contrat', `<form class="stack" onsubmit="App.saveContract(event,'${eid || ''}')">
+      ${e ? `<p class="muted">Pour <b>${esc(fullname(e))}</b> · ${esc(e.poste)} · ${esc(e.magasin)}</p>` : `<label>Employé<select name="emp" required>${emps.map(x => `<option value="${x.id}">${esc(fullname(x))} · ${esc(x.poste)}</option>`).join('')}</select></label>`}
+      <label>Modèle<select name="tpl">${t0 ? '' : '<option value="auto" selected>Selon le poste de l’employé</option>'}${st.data.tpls.map(t => `<option value="${t.id}" ${t === t0 ? 'selected' : ''}>${esc(t.title)}</option>`).join('')}</select></label>
+      <div class="two"><label>Statut<select name="statut"><option>Temps plein</option><option>Temps partiel</option></select></label><label>Heures par semaine<input type="number" min="1" max="60" name="heures" required value="35"></label>
+      <label>Date d’entrée en fonction<input type="date" name="debut" value="${e ? e.start_date : ''}"></label><label>Taux horaire ($)<input type="number" step="0.01" min="0" name="taux" placeholder="Taux actuel"></label>
+      <label>Période de probation<select name="essai"><option>3 mois</option><option>6 mois</option><option>1 mois</option></select></label></div>
+      <p class="small muted">Laisse la date et le taux vides pour utiliser la date d’embauche et le taux actuel de l’employé. L’adresse de l’employé vient de sa fiche d’embauche.</p>
+      <p id="cf-err" class="err" hidden></p><div class="row"><button class="btn primary">Créer et afficher le contrat</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`);
+    } catch (e) { fail(e); }
+  },
+  async saveContract(ev, eid) {
+    const f = formData(ev); const btn = ev.submitter; if (btn) btn.disabled = true; const id = eid || f.emp;
+    try {
+      const e = (await q(sb.from('employees').select('*').eq('id', id)))[0];
+      const info = (await q(sb.from('employee_info').select('*').eq('employee_id', id)))[0] || null;
+      const rate = (await q(sb.from('salary_history').select('rate').eq('employee_id', id).order('effective', { ascending: false }).limit(1)))[0]?.rate || 0;
+      const S = (await q(sb.from('app_settings').select('*')))[0] || {};
+      const tpls = st.data.tpls; const tpl = f.tpl === 'auto' ? guessTpl(e, tpls) : tpls.find(t => t.id === f.tpl);
+      const o = { statut: f.statut, heures: f.heures, date_debut: f.debut || e.start_date, taux: f.taux ? Number(f.taux) : Number(rate), essai: f.essai };
+      const c = await q(sb.from('contracts').insert({ employee_id: id, title: tpl.title, body: fillContract(e, info, S, tpl, o), opts: o }).select('id').single());
+      notify('contract', c.id); toast('Contrat créé. ' + e.first_name + ' recevra un courriel.'); await loadPage(); App.viewContract(c.id);
+    } catch (x) { const er = $('#cf-err'); if (er) { er.textContent = errMsg(x); er.hidden = false; } else fail(x); if (btn) btn.disabled = false; }
+  },
+  async viewContract(id) {
+    try {
+      const c = (await q(sb.from('contracts').select('*').eq('id', id)))[0]; if (!c) return toast('Contrat introuvable.');
+      const e = (await q(sb.from('employees').select('id,first_name,last_name,poste').eq('id', c.employee_id)))[0];
+      st.ctrOpen = { c, e };
+      modal(c.title, `<div class="spread"><span class="muted">${esc(fullname(e))} · ${esc(e.poste)}</span><div class="row">${cPill(c, false)}<button class="btn sm" onclick="App.printContract('${c.id}')">Imprimer ou PDF</button></div></div>${contractDoc(c, fullname(e), companyOf(c.body), 'admin')}${c.completed_at ? '<p class="small muted">L’employé peut consulter le contrat signé en tout temps dans « Mon contrat ».</p>' : `<div class="row"><button class="btn ghost crit" onclick="App.delContract('${c.id}')">Supprimer ce contrat</button></div>`}`, true);
+    } catch (x) { fail(x); }
+  },
+  async delContract(id) { if (!confirm('Supprimer ce contrat? Les signatures déjà apposées seront perdues.')) return; try { await q(sb.from('contracts').delete().eq('id', id)); closeModal(); toast('Contrat supprimé.'); await loadPage(); } catch (e) { fail(e); } },
+  async signForm(id, who) {
+    let c = st.ctrOpen?.c?.id === id ? st.ctrOpen.c : (st.data.myCtrFull || []).find(x => x.id === id); if (!c) return;
+    const admin = st.role === 'admin'; const empName = admin ? fullname(st.ctrOpen.e) : fullname(st.me);
+    let signer = '';
+    if (who === 'admin') { try { signer = (await q(sb.from('app_settings').select('admin_signer,company_rep')))[0]; signer = signer?.admin_signer || signer?.company_rep || ''; } catch (_) {} }
+    const inPerson = admin && who === 'emp';
+    modal(who === 'emp' ? 'Signature de l’employé' : 'Signature de l’employeur', `<form class="stack" onsubmit="App.saveSig(event,'${id}','${who}')">
+    ${inPerson ? `<div class="banner acc small">Remets l’appareil à ${esc(st.ctrOpen.e.first_name)} pour qu’il ou elle signe.</div>` : ''}
+    <label>Nom complet<input name="name" required value="${esc(who === 'emp' ? empName : signer)}"></label>
+    <div class="stack" style="gap:6px"><div class="spread"><span style="font-weight:600;font-size:.9rem">Trace ta signature dans le cadre</span><button type="button" class="btn ghost sm" onclick="App.clearPad()">Effacer</button></div><canvas id="pad" class="pad" aria-label="Zone de signature"></canvas></div>
+    <label class="check"><input type="checkbox" name="ok" required><span>${who === 'emp' ? 'J’ai lu mon contrat de travail et j’en accepte les conditions.' : `Je signe ce contrat au nom de ${esc(companyOf(c.body))}.`}</span></label>
+    <p id="sg-err" class="err" hidden>Trace ta signature dans le cadre avant de continuer.</p>
+    <div class="row"><button class="btn primary">Signer</button><button type="button" class="btn ghost" onclick="${admin ? `App.viewContract('${id}')` : 'App.close()'}">Annuler</button></div></form>`);
+    initPad();
+  },
+  clearPad() { if (!sigPad) return; sigPad.x.clearRect(0, 0, sigPad.c.width, sigPad.c.height); sigPad.drawn = false; },
+  async saveSig(ev, id, who) {
+    const f = formData(ev); if (!sigPad || !sigPad.drawn) { $('#sg-err').hidden = false; return; }
+    const btn = ev.submitter; if (btn) btn.disabled = true;
+    try {
+      const c = await q(sb.rpc('contract_sign', { p_id: id, p_who: who, p_name: f.name.trim(), p_img: sigImage() }));
+      if (st.role !== 'admin') notify('contract_signed', id);
+      closeModal(); toast(c.completed_at ? 'Contrat signé par les deux parties.' : 'Signature enregistrée.');
+      await loadPage(); if (st.role === 'admin') App.viewContract(id);
+    } catch (e) { const er = $('#sg-err'); er.textContent = errMsg(e); er.hidden = false; if (btn) btn.disabled = false; }
+  },
+  async printContract(id) {
+    const w = window.open('', '_blank'); if (!w) return toast('Autorise les fenêtres surgissantes pour imprimer.');
+    try {
+      const c = (await q(sb.from('contracts').select('*').eq('id', id)))[0];
+      const e = st.role === 'admin' ? (await q(sb.from('employees').select('first_name,last_name').eq('id', c.employee_id)))[0] : st.me;
+      w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(c.title)} — ${esc(fullname(e))}</title><style>body{font-family:Georgia,serif;color:#111;max-width:760px;margin:30px auto;padding:0 24px;line-height:1.55;font-size:13px}.ctext{white-space:pre-wrap}.ct{display:block;text-align:center;font-size:18px;font-weight:700}.cst{display:block;text-align:center;font-weight:700;letter-spacing:.06em}.ch{display:inline-block;margin-top:8px}.sigs{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px;break-inside:avoid}.sigline{border-bottom:1px solid #111;min-height:80px;display:flex;align-items:flex-end}.sigline img{max-height:76px;max-width:100%}.sigmeta{display:block;font-size:11px;color:#444;margin-top:4px}.btn{display:none}p.sigmeta{margin-top:24px}</style></head><body>${contractDoc(c, fullname(e), companyOf(c.body), 'print')}<script>setTimeout(()=>print(),300)<\/script></body></html>`);
+      w.document.close();
+    } catch (x) { w.close(); fail(x); }
+  },
+  async saveCompany(ev) { const f = formData(ev); Object.keys(f).forEach(k => f[k] = String(f[k]).trim()); try { await q(sb.from('app_settings').update({ ...f, updated_at: new Date().toISOString() }).eq('id', 1)); toast('Renseignements enregistrés. Ils s’appliquent aux nouveaux contrats.'); await loadPage(); } catch (e) { fail(e); } },
+  tplForm(id) {
+    const t = id ? st.data.tpls.find(x => x.id === id) : { poste: '', title: 'Contrat — ', body: st.data.tpls[0]?.body || '' };
+    modal(id ? 'Modifier le modèle' : 'Nouveau modèle', `<form class="stack" onsubmit="App.saveTpl(event,'${id || ''}')"><div class="two"><label>Type de poste<input name="poste" required value="${esc(t.poste)}"></label><label>Titre<input name="title" required value="${esc(t.title)}"></label></div>
+    <label>Texte du contrat<textarea class="big" name="body" required style="min-height:50vh">${esc(t.body)}</textarea></label>
+    <p class="small muted">Champs remplis automatiquement : ${['entreprise', 'adresse_entreprise', 'representant', 'titre_representant', 'ville', 'prenom', 'nom', 'adresse_employe', 'poste', 'lieu', 'magasin', 'date_debut', 'statut', 'heures', 'taux', 'essai', 'date_contrat'].map(v => `<code>{{${v}}}</code>`).join(' ')}</p>
+    <p class="small muted">Les contrats déjà créés ne changent pas.</p>
+    <div class="row"><button class="btn primary">Enregistrer le modèle</button>${id ? `<button type="button" class="btn ghost crit" onclick="App.delTpl('${id}')">Supprimer le modèle</button>` : ''}<button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`, true);
+  },
+  async saveTpl(ev, id) { const f = formData(ev); try { if (id) await q(sb.from('contract_templates').update({ poste: f.poste.trim(), title: f.title.trim(), body: f.body, updated_at: new Date().toISOString() }).eq('id', id)); else await q(sb.from('contract_templates').insert({ poste: f.poste.trim(), title: f.title.trim(), body: f.body, position: (st.data.tpls.at(-1)?.position || 0) + 1 })); st.data.tpls = null; closeModal(); toast('Modèle enregistré.'); await loadPage(); } catch (e) { fail(e); } },
+  async delTpl(id) { if (st.data.tpls.length <= 1) return toast('Garde au moins un modèle.'); if (!confirm('Supprimer ce modèle?')) return; try { await q(sb.from('contract_templates').delete().eq('id', id)); st.data.tpls = null; closeModal(); toast('Modèle supprimé.'); await loadPage(); } catch (e) { fail(e); } },
+
+  /* Messages */
+  msgTab(k) { st.msgFilter = k; render(); },
+  async msgOpen(id) {
+    try {
+      const admin = st.role === 'admin'; const t = (admin ? st.data.threads : st.data.myThreads).find(x => x.id === id); if (!t) return;
+      const msgs = await q(sb.from('thread_msgs').select('*').eq('thread_id', id).order('created_at'));
+      if (admin && t.unread_admin) { await q(sb.from('threads').update({ unread_admin: false }).eq('id', id)); t.unread_admin = false; st.badges.msgs = Math.max(0, (st.badges.msgs || 1) - 1); }
+      if (!admin && t.unread_emp) { await q(sb.rpc('thread_seen', { p_id: id })); t.unread_emp = false; }
+      render(); modal(t.subject, threadView(t, msgs, admin ? 'admin' : 'emp'), true);
+      const th = document.querySelector('.thread'); if (th) th.scrollTop = th.scrollHeight;
+    } catch (e) { fail(e); }
+  },
+  async msgReply(ev, id) {
+    const f = formData(ev); const btn = ev.submitter; if (btn) btn.disabled = true; const admin = st.role === 'admin';
+    try {
+      await q(sb.from('thread_msgs').insert({ thread_id: id, body: f.text.trim(), from_admin: admin }));
+      if (admin) await q(sb.from('threads').update({ unread_admin: false }).eq('id', id));
+      notify(admin ? 'message_reply' : 'message_new', id); toast('Message envoyé.');
+      await loadPage(); App.msgOpen(id);
+    } catch (e) { fail(e); if (btn) btn.disabled = false; }
+  },
+  async msgClose(id, close) { try { await q(sb.from('threads').update({ status: close ? 'fermé' : 'ouvert' }).eq('id', id)); closeModal(); toast(close ? 'Conversation fermée.' : 'Conversation rouverte.'); await loadPage(); } catch (e) { fail(e); } },
+  async msgNew(ev) {
+    const f = formData(ev); const btn = ev.submitter; if (btn) btn.disabled = true;
+    try {
+      const t = await q(sb.from('threads').insert({ employee_id: st.me.id, type: f.type, subject: f.subject.trim() }).select('id').single());
+      await q(sb.from('thread_msgs').insert({ thread_id: t.id, body: f.text.trim() }));
+      notify('message_new', t.id); toast('Message envoyé à la direction.'); await loadPage();
+    } catch (e) { fail(e); if (btn) btn.disabled = false; }
+  },
+
+  /* Courriels */
+  async mailSettings(ev) { const f = formData(ev); const off = Object.keys(MAIL_KINDS).filter(k => !f['k_' + k]); try { await q(sb.from('app_settings').update({ notify_email: (f.notify_email || '').trim(), mail_off: off, updated_at: new Date().toISOString() }).eq('id', 1)); toast('Réglages enregistrés.'); await loadPage(); } catch (e) { fail(e); } },
+
   async rsvp(id, v) { try { await q(sb.from('news_rsvp').upsert({ news_id: id, employee_id: st.me.id, answer: v, answered_at: new Date().toISOString() })); toast(v === 'oui' ? 'Ta participation est confirmée.' : 'Merci de nous avoir avisés.'); await loadPage(); } catch (e) { fail(e); } },
 };
 window.App = App;
