@@ -116,7 +116,7 @@ async function afterLogin() {
 
 /* ---------- Écrans de connexion ---------- */
 function loginShell(inner) {
-  return `<div class="login"><div class="login-card"><img class="brandlogo" src="${LOGO}" alt="Marius &amp; Fanny, artisan du soleil"><p class="tagline">Espace équipe</p>${inner}</div></div>`;
+  return `<div class="login"><span class="sym sym-croissant s1" aria-hidden="true"></span><span class="sym sym-baguette s2" aria-hidden="true"></span><span class="sym sym-citrons s3" aria-hidden="true"></span><span class="sym sym-cafe s4" aria-hidden="true"></span><div class="login-card"><img class="brandlogo" src="${LOGO}" alt="Marius &amp; Fanny, artisan du soleil"><p class="tagline">Espace équipe</p>${inner}<div class="symrow" aria-hidden="true"><span class="sym sym-cafe"></span><span class="sym sym-croissant"></span><span class="sym sym-baguette"></span><span class="sym sym-citrons"></span></div></div></div>`;
 }
 function loginView() {
   return loginShell(`<div class="panel stack"><div class="stack" style="gap:4px"><h1>Connexion</h1><p class="muted">Accède à ton dossier, à tes congés et au cahier de l’employé.</p></div>
@@ -178,7 +178,7 @@ function render() {
   const admin = st.role === 'admin';
   const content = admin ? subTabs(ADMIN_GROUPS) + adminPage() : subTabs(EMP_GROUPS) + empPage();
   const name = admin ? 'Administratrice' : fullname(st.me);
-  app.innerHTML = `<div class="shell${m ? ' mob' : ''}"><aside class="rail"><div class="brandbar"><img src="${LOGO}" alt="Marius &amp; Fanny"><span class="brandsub">Espace équipe</span></div><nav class="nav" aria-label="Navigation">${admin ? adminNav() : empNav()}</nav><div class="who"><span class="wname">${esc(name)}<br><span class="muted small">${admin ? 'Administration' : esc(st.me.poste)}</span></span><button class="btn sm" onclick="App.logout()">Se déconnecter</button></div></aside><main class="pane"><div class="inner">${content}</div></main></div>`;
+  app.innerHTML = `<div class="shell${m ? ' mob' : ''}"><aside class="rail"><div class="brandbar"><img src="${LOGO}" alt="Marius &amp; Fanny"><span class="brandsub">Espace équipe</span></div><nav class="nav" aria-label="Navigation">${admin ? adminNav() : empNav()}</nav><span class="sym sym-croissant railsym" aria-hidden="true"></span><div class="who"><span class="wname">${esc(name)}<br><span class="muted small">${admin ? 'Administration' : esc(st.me.poste)}</span></span><button class="btn sm" onclick="App.logout()">Se déconnecter</button></div></aside><main class="pane"><div class="inner">${content}</div></main></div>`;
 }
 const loading = () => `<div class="center" style="min-height:200px"><div class="spinner"></div></div>`;
 
@@ -311,7 +311,7 @@ function dashView() {
   const notRead = emps.filter(e => e.user_id && !read.has(e.id));
   const b = st.badges || {}; const pl = st.data.pendLeaves || []; const ow = st.data.openWarn || [];
   const empOf = id => (st.data.emps || []).find(e => e.id === id);
-  return `<div class="spread"><div><p class="eyebrow">Administration</p><h1>Tableau de bord</h1></div></div>
+  return `<div class="spread"><div><p class="eyebrow">Administration</p><h1>Tableau de bord<span class="sym sym-baguette ttl" aria-hidden="true"></span></h1></div></div>
   <div class="tiles"><button class="tile" onclick="App.go('emps')"><b>${emps.length}</b><span>employés actifs</span></button><button class="tile${b.leaves ? ' alert' : ''}" onclick="App.go('leaves')"><b>${b.leaves || 0}</b><span>demandes de vacances à traiter</span></button><button class="tile${b.msgs ? ' alert' : ''}" onclick="App.go('msgs')"><b>${b.msgs || 0}</b><span>messages non lus</span></button><button class="tile${b.ctr ? ' alert' : ''}" onclick="App.go('contracts')"><b>${b.ctr || 0}</b><span>contrats à signer</span></button><button class="tile${b.acc ? ' alert' : ''}" onclick="App.go('acc')"><b>${b.acc || 0}</b><span>accidents à compléter</span></button><button class="tile${b.evals ? ' alert' : ''}" onclick="App.go('evals')"><b>${b.evals || 0}</b><span>auto-évaluations à lire</span></button><button class="tile${inc.length ? ' alert' : ''}" onclick="App.go('emps')"><b>${inc.length}</b><span>fiches d’embauche incomplètes</span></button><button class="tile${notRead.length ? ' alert' : ''}" onclick="App.go('handbook')"><b>${notRead.length}</b><span>n’ont pas lu le cahier</span></button></div>
   ${annivSection()}
   ${pl.length ? `<section class="section"><h2>Demandes de vacances à traiter</h2>${pendingList(pl.map(l => ({ ...l, emp: empOf(l.employee_id) })).filter(l => l.emp), [])}</section>` : ''}
@@ -388,7 +388,7 @@ function handbookBlock(aud, preview) {
   const m = st.data.hbMeta || {}; const secs = (st.data.hbSecs || []).filter(x => x.aud === 'all' || x.aud === aud); if (!secs.length) return '';
   if ((st.hbIndex || 0) >= secs.length) st.hbIndex = 0; const cur = secs[st.hbIndex || 0];
   const read = !preview && (st.data.myReads || []).some(r => r.version === m.version);
-  return `<section class="handbook"><div class="hb-head"><div><span class="eyebrow">Cahier de l’employé · ${esc(m.version_name)}</span><h2>${esc(m.headline)}</h2></div>${preview ? '<span class="pill p-acc">Aperçu</span>' : read ? '<span class="pill p-ok">Lu</span>' : `<button class="btn primary" onclick="App.readHb()">J’ai lu le cahier</button>`}</div>
+  return `<section class="handbook"><div class="hb-head"><span class="sym sym-croissant" aria-hidden="true"></span><div><span class="eyebrow">Cahier de l’employé · ${esc(m.version_name)}</span><h2>${esc(m.headline)}</h2></div>${preview ? '<span class="pill p-acc">Aperçu</span>' : read ? '<span class="pill p-ok">Lu</span>' : `<button class="btn primary" onclick="App.readHb()">J’ai lu le cahier</button>`}</div>
   <div class="hb-body"><div class="hb-toc">${secs.map((x, i) => `<button aria-current="${i === (st.hbIndex || 0)}" onclick="App.hb(${i},${preview ? `'${aud}'` : 'null'})">${esc(x.title)}</button>`).join('')}</div><div class="hb-text"><h3>${esc(cur.title)}</h3>${hbRender(cur.body)}</div></div></section>`;
 }
 
@@ -909,7 +909,7 @@ function annivSection() {
 }
 function myRecog() {
   const r = (st.data.myRecogs || []).filter(x => (new Date(TODAY) - new Date(x.date)) / 864e5 <= 30 && x.date <= TODAY).sort((a, b) => a.date < b.date ? 1 : -1)[0]; if (!r) return '';
-  return `<section class="recog"><div class="yrs">${r.years}<span style="font-size:1rem;display:block">an${r.years > 1 ? 's' : ''}</span></div><div class="stack" style="gap:6px;flex:1;min-width:200px"><span class="eyebrow">Anniversaire de service · ${fd(r.date)}</span><p style="white-space:pre-wrap">${esc(r.msg)}</p>${r.gift ? `<span class="small muted">Petite attention : ${esc(r.gift)}</span>` : ''}</div></section>`;
+  return `<section class="recog"><span class="sym sym-citrons" aria-hidden="true"></span><div class="yrs">${r.years}<span style="font-size:1rem;display:block">an${r.years > 1 ? 's' : ''}</span></div><div class="stack" style="gap:6px;flex:1;min-width:200px"><span class="eyebrow">Anniversaire de service · ${fd(r.date)}</span><p style="white-space:pre-wrap">${esc(r.msg)}</p>${r.gift ? `<span class="small muted">Petite attention : ${esc(r.gift)}</span>` : ''}</div></section>`;
 }
 
 /* ---------- Formation ---------- */
@@ -1045,7 +1045,7 @@ function homeView() {
   const d = st.data; const w = (d.myWarn || []).filter(x => !x.ack_at); const props = (d.myLeaves || []).filter(l => l.status === 'contre-proposition' && l.prop_start);
   const decided = (d.myLeaves || []).filter(l => !l.seen && ['acceptée', 'refusée'].includes(l.status)); const unread = (d.myThreads || []).filter(t => t.unread_emp).length;
   const toSign = (d.myCtr || []).some(c => !c.emp_sig_at);
-  return `<div><p class="eyebrow">${new Date().toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><h1>Bonjour ${esc(e.first_name)}</h1><p class="muted">Membre de l’équipe depuis ${seniority(e.start_date)}</p></div>
+  return `<div class="greet"><div><p class="eyebrow">${new Date().toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><h1>Bonjour ${esc(e.first_name)}</h1><p class="muted">Membre de l’équipe depuis ${seniority(e.start_date)}</p></div><span class="sym sym-cafe" aria-hidden="true"></span></div>
   ${myRecog()}
   ${myOnb()}
   ${(() => { const ev = (d.myEvals || []).find(v => v.status !== 'remise'); return ev ? `<div class="banner acc"><div><b>Ton auto-évaluation est prête.</b><br><span class="small">${ev.due ? `À remettre avant le ${fd(ev.due)}.` : 'Remplis-la avant ta révision salariale.'}</span></div><button class="btn primary" onclick="App.go('meval')">${ev.status === 'brouillon' ? 'Continuer' : 'Commencer'}</button></div>` : ''; })()}
