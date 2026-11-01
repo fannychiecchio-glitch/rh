@@ -1,10 +1,11 @@
 /* =====================================================================
-   Espace équipe Marius & Fanny — version en ligne (étapes 1 à 3)
+   Espace équipe Marius & Fanny — version en ligne (étapes 1 à 4)
    Connexion sécurisée, dossiers des employés, fiche d'embauche,
    salaire et avantages, cahier de l'employé, nouvelles,
    vacances et calendriers, avertissements, contrats signés,
    messages et avis par courriel, paye et pourboire,
-   banque d'heures, achats, jours de maladie payés.
+   banque d'heures, achats, jours de maladie payés, coffre chiffré,
+   accidents, formation, auto-évaluation, accueil et clés.
    ===================================================================== */
 'use strict';
 const sb = window.supabase.createClient(MF_CONFIG.supabaseUrl, MF_CONFIG.supabaseKey, {
@@ -47,7 +48,8 @@ const TPL_KEYS = [['vend', 'Vente'], ['gerant', 'Vente'], ['caiss', 'Vente'], ['
 const MAIL_KINDS = {
   warning: ['Nouvel avertissement à lire', 'emp'], leave_answer: ['Réponse à une demande de vacances', 'emp'], contract: ['Contrat de travail à signer', 'emp'],
   message_reply: ['Réponse à un message', 'emp'], news: ['Nouvelle publiée (quand tu coches l’envoi)', 'emp'],
-  leave_request: ['Nouvelle demande de vacances', 'adm'], message_new: ['Nouveau message d’un employé', 'adm'], contract_signed: ['Contrat signé par un employé', 'adm'],
+  eval_launch: ['Auto-évaluation annuelle à remplir', 'emp'], eval_remind: ['Rappel d’auto-évaluation', 'emp'], recog: ['Anniversaire de service souligné', 'emp'], onb_remind: ['Rappel de la liste d’accueil', 'emp'],
+  leave_request: ['Nouvelle demande de vacances', 'adm'], accident: ['Accident déclaré par un employé', 'adm'], eval_done: ['Auto-évaluation remise', 'adm'], message_new: ['Nouveau message d’un employé', 'adm'], contract_signed: ['Contrat signé par un employé', 'adm'],
 };
 // Avis par courriel : le site dit seulement quel événement est arrivé; la fonction « notify » vérifie les droits et choisit le destinataire.
 function notify(kind, id) { sb.functions.invoke('notify', { body: { kind, id } }).then(({ data, error }) => { if (error || data?.error) console.warn('Courriel non envoyé', kind, data?.error || error); }).catch(e => console.warn(e)); }
@@ -146,21 +148,21 @@ function messageView(title, text) {
 
 /* ---------- Coquille de l'application ---------- */
 const navItem = (page, label, active, n) => `<button onclick="App.go('${page}')" aria-current="${active}">${label}${n ? `<span class="count">${n}</span>` : ''}</button>`;
-const ADMIN_GROUPS = { emps: [['emps', 'Dossiers'], ['contracts', 'Contrats']], comms: [['msgs', 'Messages'], ['handbook', 'Cahier de l’employé'], ['news', 'Nouvelles'], ['mail', 'Courriels']] };
-const EMP_GROUPS = { dossier: [['minfo', 'Mes informations'], ['mcontract', 'Mon contrat'], ['msal', 'Salaire et avantages'], ['mwarn', 'Avertissements']] };
+const ADMIN_GROUPS = { emps: [['emps', 'Dossiers'], ['contracts', 'Contrats'], ['train', 'Formation'], ['evals', 'Auto-évaluations'], ['vault', 'Coffre']], comms: [['msgs', 'Messages'], ['handbook', 'Cahier de l’employé'], ['news', 'Nouvelles'], ['mail', 'Courriels']] };
+const EMP_GROUPS = { dossier: [['minfo', 'Mes informations'], ['mcontract', 'Mon contrat'], ['msal', 'Salaire et avantages'], ['mwarn', 'Avertissements'], ['msecure', 'Confidentiel'], ['meval', 'Auto-évaluation']], msgs: [['mmsg', 'Messages'], ['macc', 'Déclarer un accident']] };
 const groupOf = (G, p) => Object.keys(G).find(k => G[k].some(x => x[0] === p));
 function subTabs(G) { const g = groupOf(G, st.view.page); if (!g || G[g].length < 2) return ''; const c = subCounts(); return `<nav class="subtabs">${G[g].map(([p, l]) => `<button onclick="App.go('${p}')" aria-current="${st.view.page === p}">${l}${c[p] ? ` <span class="count">${c[p]}</span>` : ''}</button>`).join('')}</nav>`; }
 function subCounts() {
-  if (st.role === 'admin') { const b = st.badges || {}; return { contracts: b.ctr, msgs: b.msgs }; }
-  const d = st.data; return { minfo: d.myInfo === undefined ? 0 : infoDone(d.myInfo) ? 0 : 1, mcontract: (d.myCtr || []).filter(c => !c.emp_sig_at).length, mwarn: (d.myWarn || []).filter(w => !w.ack_at).length };
+  if (st.role === 'admin') { const b = st.badges || {}; return { contracts: b.ctr, msgs: b.msgs, evals: b.evals }; }
+  const d = st.data; return { minfo: d.myInfo === undefined ? 0 : infoDone(d.myInfo) ? 0 : 1, mcontract: (d.myCtr || []).filter(c => !c.emp_sig_at).length, mwarn: (d.myWarn || []).filter(w => !w.ack_at).length, msecure: d.vpub ? kindsFor(st.me).filter(k => !(d.mySec || []).some(x => x.kind === k)).length : 0, meval: (d.myEvals || []).filter(v => v.status !== 'remise').length };
 }
-function adminNav() { const p = st.view.page, g = groupOf(ADMIN_GROUPS, p), b = st.badges || {}; return navItem('dash', 'Tableau de bord', p === 'dash') + navItem('emps', 'Employés', g === 'emps' || p === 'emp', b.ctr) + navItem('leaves', 'Congés', p === 'leaves', b.leaves) + navItem('tips', 'Paye et pourboire', p === 'tips') + navItem('msgs', 'Communication', g === 'comms', b.msgs); }
+function adminNav() { const p = st.view.page, g = groupOf(ADMIN_GROUPS, p), b = st.badges || {}; return navItem('dash', 'Tableau de bord', p === 'dash') + navItem('emps', 'Employés', g === 'emps' || p === 'emp', (b.ctr || 0) + (b.evals || 0)) + navItem('leaves', 'Congés', p === 'leaves', b.leaves) + navItem('tips', 'Paye et pourboire', p === 'tips') + navItem('acc', 'Santé et sécurité', p === 'acc', b.acc) + navItem('msgs', 'Communication', g === 'comms', b.msgs); }
 function empNav() {
   const p = st.view.page, c = subCounts(), d = st.data;
-  const nDos = (c.minfo || 0) + (c.mcontract || 0) + (c.mwarn || 0);
+  const nDos = (c.minfo || 0) + (c.mcontract || 0) + (c.mwarn || 0) + (c.msecure || 0) + (c.meval || 0);
   const nLeave = (d.myLeaves || []).filter(l => l.status === 'contre-proposition' || (!l.seen && ['acceptée', 'refusée'].includes(l.status))).length;
   const nMsg = (d.myThreads || []).filter(t => t.unread_emp).length;
-  return navItem('home', 'Accueil', p === 'home') + navItem('minfo', 'Mon dossier', !!groupOf(EMP_GROUPS, p), nDos) + navItem('mleave', 'Mes congés', p === 'mleave', nLeave) + navItem('mmsg', 'Messages', p === 'mmsg', nMsg) + navItem('macct', 'Mon compte', p === 'macct');
+  return navItem('home', 'Accueil', p === 'home') + navItem('minfo', 'Mon dossier', !!groupOf(EMP_GROUPS, p), nDos) + (trainFor(st.me).length ? navItem('mtrain', 'Formation', p === 'mtrain', trainProg(st.me).d < trainProg(st.me).t ? 1 : 0) : '') + navItem('mleave', 'Mes congés', p === 'mleave', nLeave) + navItem('mmsg', 'Messages', !!groupOf({ m: EMP_GROUPS.msgs }, p), nMsg) + navItem('macct', 'Mon compte', p === 'macct');
 }
 
 function render() {
@@ -187,7 +189,9 @@ async function loadPage() {
     if (st.role === 'admin') {
       const cnt = t => t.select('id', { count: 'exact', head: true });
       const [b1, b2, b3] = await Promise.all([cnt(sb.from('leave_requests')).eq('status', 'en attente'), cnt(sb.from('contracts')).is('completed_at', null), cnt(sb.from('threads')).eq('unread_admin', true)]);
-      st.badges = { leaves: b1.count || 0, ctr: b2.count || 0, msgs: b3.count || 0 };
+      const [b4, b5] = await Promise.all([cnt(sb.from('accidents')).eq('status', 'à traiter'), cnt(sb.from('evals')).eq('status', 'remise').eq('seen', false)]);
+      st.badges = { leaves: b1.count || 0, ctr: b2.count || 0, msgs: b3.count || 0, acc: b4.count || 0, evals: b5.count || 0 };
+      if (!st.cleaned) { st.cleaned = true; sb.rpc('mf_cleanup').then(({ error }) => error && console.warn(error)); }
       const CTR_LIST = 'id,employee_id,title,created_at,emp_sig_at,admin_sig_at,completed_at';
       if (p === 'dash') {
         st.data.pendLeaves = await q(sb.from('leave_requests').select('*').eq('status', 'en attente').order('start_date'));
@@ -220,6 +224,21 @@ async function loadPage() {
         st.data.mailLog = await q(sb.from('notify_log').select('*').order('at', { ascending: false }).limit(60));
       }
       if (p === 'tips' || p === 'emp' || p === 'leaves') await loadPay();
+      const allEmps = () => q(sb.from('employees').select('*').order('last_name'));
+      if (p === 'dash') st.data.recogs = await q(sb.from('recognitions').select('employee_id,years'));
+      if (p === 'emp') {
+        const id = st.view.id;
+        const [k, o, od, os, sm, hm, hr, ev, vp] = await Promise.all([q(sb.from('keys_held').select('*').eq('employee_id', id).order('given', { ascending: false })), q(sb.from('onb').select('*').eq('employee_id', id)), q(sb.from('onb_done').select('*').eq('employee_id', id)), q(sb.from('onb_steps').select('*').order('position')),
+          q(sb.from('secure_items').select('id,kind,created_at,employee_id').eq('employee_id', id)), q(sb.from('handbook_meta').select('version')), q(sb.from('handbook_reads').select('version').eq('employee_id', id)), q(sb.from('evals').select('*').eq('employee_id', id).order('year', { ascending: false })), q(sb.from('vault_pub').select('id'))]);
+        Object.assign(st.data, { empKeys: k, empOnb: o[0] || null, empOnbDone: od, onbSteps: os, empSec: sm, empHbRead: hr.some(r => r.version === hm[0]?.version), empEvals: ev, vaultOn: vp.length > 0 });
+      }
+      if (p === 'vault') {
+        const [vk, sm, em, lg] = await Promise.all([q(sb.from('vault_key').select('id')), q(sb.from('secure_items').select('id,kind,created_at,employee_id')), allEmps(), q(sb.from('vault_log').select('*').order('at', { ascending: false }).limit(2000))]);
+        Object.assign(st.data, { vkey: vk.length > 0, secMeta: sm, emps: em, vlog: lg });
+      }
+      if (p === 'acc') { st.data.accs = await q(sb.from('accidents').select('*').order('date', { ascending: false })); st.data.emps = await allEmps(); }
+      if (p === 'train') { const [m, l, d] = await Promise.all([q(sb.from('training_modules').select('*')), q(sb.from('training_lessons').select('*')), q(sb.from('training_done').select('*'))]); st.data.train = { mods: m, les: l, done: d }; st.data.emps = await allEmps(); }
+      if (p === 'evals') { st.data.evals = await q(sb.from('evals').select('*')); st.data.emps = await allEmps(); }
       if (p === 'dash' || p === 'emps') {
         st.data.emps = await q(sb.from('employees').select('*').order('last_name'));
         st.data.infos = await q(sb.from('employee_info').select('employee_id,birth,street,city,postal,phone,email_perso,em_name,em_rel,em_phone'));
@@ -257,6 +276,11 @@ async function loadPage() {
       ]);
       for (const r of [r1, r2, r3, r4, r5]) if (r.error) throw r.error;
       st.data.myInfo = r1.data[0] || null; st.data.myWarn = r2.data; st.data.myCtr = r3.data; st.data.myLeaves = r4.data; st.data.myThreads = r5.data;
+      const [s1, s2, s3, s4, s5, s6, s7, s8] = await Promise.all([sb.rpc('my_secure_status'), sb.from('vault_pub').select('pub'), sb.from('onb').select('*').eq('employee_id', id), sb.from('training_modules').select('*'), sb.from('training_lessons').select('id,module_id,position,title,body'), sb.from('training_done').select('*').eq('employee_id', id), sb.from('evals').select('*').eq('employee_id', id).order('year', { ascending: false }), sb.from('recognitions').select('*').eq('employee_id', id)]);
+      for (const r of [s1, s2, s3, s4, s5, s6, s7, s8]) if (r.error) throw r.error;
+      Object.assign(st.data, { mySec: s1.data, vpub: s2.data[0]?.pub || null, myOnb: s3.data[0] || null, train: { mods: s4.data, les: s5.data, done: s6.data }, myEvals: s7.data, myRecogs: s8.data });
+      if (p === 'macc') st.data.myAccs = await q(sb.from('accidents').select('id,date,place,injury,kind,off_days,status').eq('employee_id', id).order('date', { ascending: false }));
+      if ((p === 'home' || p === 'msecure') && !st.data.hbMeta) st.data.hbMeta = (await q(sb.from('handbook_meta').select('*')))[0];
       if (p === 'mcontract') st.data.myCtrFull = await q(sb.from('contracts').select('*').eq('employee_id', id).order('created_at', { ascending: false }));
       if (p === 'home') {
         st.data.hbMeta = (await q(sb.from('handbook_meta').select('*')))[0];
@@ -277,7 +301,7 @@ async function loadPage() {
 /* ---------- Pages administratrice ---------- */
 function adminPage() {
   if (st.loading) return loading();
-  switch (st.view.page) { case 'emps': return empsView(); case 'emp': return empDetail(); case 'handbook': return handbookAdmin(); case 'news': return newsAdmin(); case 'leaves': return leavesView(); case 'contracts': return contractsView(); case 'msgs': return adminMsgView(); case 'mail': return mailView(); case 'tips': return tipsView(); default: return dashView(); }
+  switch (st.view.page) { case 'emps': return empsView(); case 'emp': return empDetail(); case 'handbook': return handbookAdmin(); case 'news': return newsAdmin(); case 'leaves': return leavesView(); case 'contracts': return contractsView(); case 'msgs': return adminMsgView(); case 'mail': return mailView(); case 'tips': return tipsView(); case 'vault': return vaultView(); case 'acc': return accView(); case 'train': return adminTrainView(); case 'evals': return adminEvalView(); default: return dashView(); }
 }
 const curRate = id => { const r = (st.data.rates || []).find(x => x.employee_id === id); return r ? r.rate : null; };
 function dashView() {
@@ -288,7 +312,8 @@ function dashView() {
   const b = st.badges || {}; const pl = st.data.pendLeaves || []; const ow = st.data.openWarn || [];
   const empOf = id => (st.data.emps || []).find(e => e.id === id);
   return `<div class="spread"><div><p class="eyebrow">Administration</p><h1>Tableau de bord</h1></div></div>
-  <div class="tiles"><button class="tile" onclick="App.go('emps')"><b>${emps.length}</b><span>employés actifs</span></button><button class="tile${b.leaves ? ' alert' : ''}" onclick="App.go('leaves')"><b>${b.leaves || 0}</b><span>demandes de vacances à traiter</span></button><button class="tile${b.msgs ? ' alert' : ''}" onclick="App.go('msgs')"><b>${b.msgs || 0}</b><span>messages non lus</span></button><button class="tile${b.ctr ? ' alert' : ''}" onclick="App.go('contracts')"><b>${b.ctr || 0}</b><span>contrats à signer</span></button><button class="tile${inc.length ? ' alert' : ''}" onclick="App.go('emps')"><b>${inc.length}</b><span>fiches d’embauche incomplètes</span></button><button class="tile${notRead.length ? ' alert' : ''}" onclick="App.go('handbook')"><b>${notRead.length}</b><span>n’ont pas lu le cahier</span></button></div>
+  <div class="tiles"><button class="tile" onclick="App.go('emps')"><b>${emps.length}</b><span>employés actifs</span></button><button class="tile${b.leaves ? ' alert' : ''}" onclick="App.go('leaves')"><b>${b.leaves || 0}</b><span>demandes de vacances à traiter</span></button><button class="tile${b.msgs ? ' alert' : ''}" onclick="App.go('msgs')"><b>${b.msgs || 0}</b><span>messages non lus</span></button><button class="tile${b.ctr ? ' alert' : ''}" onclick="App.go('contracts')"><b>${b.ctr || 0}</b><span>contrats à signer</span></button><button class="tile${b.acc ? ' alert' : ''}" onclick="App.go('acc')"><b>${b.acc || 0}</b><span>accidents à compléter</span></button><button class="tile${b.evals ? ' alert' : ''}" onclick="App.go('evals')"><b>${b.evals || 0}</b><span>auto-évaluations à lire</span></button><button class="tile${inc.length ? ' alert' : ''}" onclick="App.go('emps')"><b>${inc.length}</b><span>fiches d’embauche incomplètes</span></button><button class="tile${notRead.length ? ' alert' : ''}" onclick="App.go('handbook')"><b>${notRead.length}</b><span>n’ont pas lu le cahier</span></button></div>
+  ${annivSection()}
   ${pl.length ? `<section class="section"><h2>Demandes de vacances à traiter</h2>${pendingList(pl.map(l => ({ ...l, emp: empOf(l.employee_id) })).filter(l => l.emp), [])}</section>` : ''}
   ${ow.length ? `<section class="section"><h2>Avertissements pas encore confirmés</h2><div class="list">${ow.map(w => { const e = empOf(w.employee_id); return e ? `<div class="item"><div class="grow"><b>${esc(fullname(e))}</b><span class="muted small">${esc(w.title)} · ${fd(w.date)}</span></div><button class="btn sm" onclick="App.openEmp('${e.id}','warn')">Voir</button></div>` : ''; }).join('')}</div></section>` : ''}
   ${emps.length ? '' : `<section class="panel stack"><h2>Bienvenue dans ton espace</h2><p>Commence par ajouter tes employés. Chacun recevra un courriel pour choisir son mot de passe.</p><div><button class="btn primary" onclick="App.go('emps');setTimeout(()=>App.empForm(),50)">Ajouter un employé</button></div></section>`}
@@ -309,7 +334,7 @@ function seniority(d) { const m = Math.max(0, Math.floor((new Date() - new Date(
 function empDetail() {
   const e = st.data.emp; if (!e) return `<div class="list"><p class="empty">Dossier introuvable.</p></div>`;
   const tab = st.view.tab || 'profil';
-  const tabs = [['profil', 'Profil'], ['fiche', 'Fiche d’embauche'], ['contrat', 'Contrat'], ['salaire', 'Salaire et avantages'], ['warn', 'Avertissements'], ['conges', 'Congés'], ['notes', 'Notes']];
+  const tabs = [['profil', 'Profil'], ['fiche', 'Fiche d’embauche'], ['contrat', 'Contrat'], ['salaire', 'Salaire et avantages'], ['warn', 'Avertissements'], ['conges', 'Congés'], ['accueil', 'Accueil'], ['secure', 'Confidentiel'], ['notes', 'Notes']];
   const flag = { contrat: (st.data.empCtr || []).some(c => !c.completed_at), warn: (st.data.empWarn || []).some(w => !w.ack_at), conges: (st.data.empLeaves || []).some(l => l.status === 'en attente') };
   let body = '';
   if (tab === 'contrat') body = `<div class="spread"><p class="muted">${esc(e.first_name)} peut signer dans son espace, ou sur ton appareil quand tu lui présentes la plateforme.</p><button class="btn primary" onclick="App.contractForm('${e.id}')">Créer un contrat</button></div>${contractRows((st.data.empCtr || []).map(c => ({ c, e })), false, 'Aucun contrat pour cet employé.')}`;
@@ -317,8 +342,11 @@ function empDetail() {
   if (tab === 'conges') body = adminSickPanel(e) + `<section class="section"><h2>Vacances et autres congés</h2>${leaveList((st.data.empLeaves || []).map(l => ({ ...l, emp: e })), true)}</section>`;
   if (tab === 'profil') body = `<div class="panel stack"><dl class="facts"><div><dt>Poste</dt><dd>${esc(e.poste) || '—'}</dd></div><div><dt>Magasin</dt><dd>${esc(e.magasin)}</dd></div><div><dt>Groupe de pourboire</dt><dd>${TIP_GROUPS[e.tip_group]}</dd></div><div><dt>Date d’embauche</dt><dd>${fd(e.start_date)}</dd></div><div><dt>Ancienneté</dt><dd>${seniority(e.start_date)}</dd></div><div><dt>Courriel de connexion</dt><dd>${esc(e.email)}</dd></div><div><dt>Statut</dt><dd>${e.active ? '<span class="pill p-ok">Actif</span>' : '<span class="pill p-mute">Inactif, ne peut plus se connecter</span>'}</dd></div></dl>
     <div class="row"><button class="btn" onclick="App.empForm('${e.id}')">Modifier le profil</button><button class="btn" onclick="App.resend('${e.id}')">Renvoyer l’invitation</button><button class="btn" onclick="App.toggleActive()">${e.active ? 'Désactiver l’accès' : 'Réactiver l’accès'}</button></div></div>`;
+  if (tab === 'profil') body += keysCard(e);
   if (tab === 'fiche') body = `<div class="panel">${infoForm(st.data.empInfo, 'admin')}</div>`;
-  if (tab === 'salaire') body = salaryBlock(st.data.empSal, st.data.empPerks, true) + empTips(e);
+  if (tab === 'salaire') body = empEvalCard() + salaryBlock(st.data.empSal, st.data.empPerks, true) + empTips(e);
+  if (tab === 'accueil') body = onbTab(e);
+  if (tab === 'secure') body = adminSecureTab(e);
   if (tab === 'notes') body = `<section class="panel stack"><div class="spread"><div><h2>Bloc-notes</h2><p class="small muted">Visible seulement par toi.</p></div><span id="nt-status" class="small muted">${st.data.empNotes ? 'Enregistré le ' + fdt(st.data.empNotes.updated_at) : 'Aucune note'}</span></div><textarea class="big" id="nt-text" oninput="App.noteInput(this.value)">${esc(st.data.empNotes?.notes || '')}</textarea><p class="small muted">Les notes s’enregistrent automatiquement.</p></section>`;
   return `<div><button class="btn ghost sm" onclick="App.go('emps')">← Tous les employés</button></div>
   <div class="spread"><div><p class="eyebrow">${esc(e.poste)} · ${esc(e.magasin)}</p><h1>${esc(fullname(e))}</h1></div>${e.active ? '' : '<span class="pill p-mute">Inactif</span>'}</div>
@@ -743,13 +771,260 @@ function sickAdminSection() {
   <p class="small muted">Tu inscris toi-même les absences maladie : les employés ne les voient pas. La Loi sur les normes du travail prévoit jusqu’à 10 jours d’absence par année pour maladie ou obligations familiales, dont les 2 premiers sont rémunérés après 3 mois de service continu.</p></section>`;
 }
 
+/* ---------- Coffre chiffré (étape 4) ---------- */
+const SECURE_KINDS = {
+  nas: { label: 'Numéro d’assurance sociale', why: 'Obligatoire pour produire tes relevés fiscaux (T4 et Relevé 1).' },
+  cheque: { label: 'Spécimen de chèque', why: 'Sert uniquement à déposer ta paie dans ton compte bancaire.' },
+  permis: { label: 'Permis de conduire', why: 'Requis pour ton poste de livraison, afin de confirmer que ton permis est valide.' },
+};
+const LOCK_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2" stroke="currentColor" stroke-width="1.4"/></svg>';
+const needsPermis = e => /livr/.test(slug(e.poste)) || !!e.needs_permis;
+const kindsFor = e => ['nas', 'cheque', ...(needsPermis(e) ? ['permis'] : [])];
+const KDF_ITER = 600000, MIN_CODE = 12;
+const V = { key: null, timer: null, until: 0, fails: 0, blocked: 0 };
+function b64(buf) { const a = new Uint8Array(buf); let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); }
+const ub64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function deriveKey(code, salt, iter) { const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(code), 'PBKDF2', false, ['deriveKey']); return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']); }
+async function wrapPriv(privBytes, code) { const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12)); const k = await deriveKey(code, salt, KDF_ITER); const enc = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, privBytes); return { enc_priv: b64(enc), salt: b64(salt), iv: b64(iv), iter: KDF_ITER }; }
+async function unwrapPriv(vk, code) { const k = await deriveKey(code, ub64(vk.salt), vk.iter); return crypto.subtle.decrypt({ name: 'AES-GCM', iv: ub64(vk.iv) }, k, ub64(vk.enc_priv)); }
+async function sealItem(pubB64, obj) {
+  const pub = await crypto.subtle.importKey('spki', ub64(pubB64), { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']);
+  const aes = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']); const raw = await crypto.subtle.exportKey('raw', aes);
+  const iv = crypto.getRandomValues(new Uint8Array(12)); const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aes, new TextEncoder().encode(JSON.stringify(obj)));
+  const wk = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, pub, raw); return { wk: b64(wk), iv: b64(iv), ct: b64(ct) };
+}
+async function openItem(it) {
+  const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, V.key, ub64(it.wk)); const aes = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ub64(it.iv) }, aes, ub64(it.ct)); return JSON.parse(new TextDecoder().decode(pt));
+}
+function lockVault(silent) { V.key = null; clearTimeout(V.timer); V.until = 0; if (!silent) { closeModal(); render(); } }
+function armVault() { V.until = Date.now() + 5 * 60e3; clearTimeout(V.timer); V.timer = setTimeout(() => { lockVault(); toast('Coffre verrouillé automatiquement.'); }, 5 * 60e3); }
+async function logVault(action, e, kind) { try { await q(sb.from('vault_log').insert({ action, employee_id: e ? e.id : null, emp_name: e ? fullname(e) : '', kind: kind ? SECURE_KINDS[kind].label : '' })); if (st.view.page === 'vault' && st.data.vlog) { st.data.vlog = await q(sb.from('vault_log').select('*').order('at', { ascending: false }).limit(2000)); const keep = $('#vu-err') && !$('#vu-err').hidden ? $('#vu-err').textContent : null; render(); if (keep) { const el = $('#vu-err'); if (el) { el.textContent = keep; el.hidden = false; } } } } catch (x) { console.warn(x); } }
+function luhn(d) { let t = 0; for (let i = 0; i < d.length; i++) { let n = +d[i]; if (i % 2 === 1) { n *= 2; if (n > 9) n -= 9; } t += n; } return t % 10 === 0; }
+const fmtNas = d => d.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3');
+function resizeImage(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onerror = () => rej(new Error('lecture')); r.onload = () => { const img = new Image(); img.onerror = () => rej(new Error('image')); img.onload = () => { const m = 1400, sc = Math.min(1, m / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', .72)); }; img.src = r.result; }; r.readAsDataURL(file); }); }
+function secureCell(e, items, k) { const it = items.find(x => x.employee_id === e.id && x.kind === k); if (!kindsFor(e).includes(k) && !it) return '<span class="muted">—</span>'; return it ? `<span class="pill p-ok">Reçu le ${fs(it.created_at)}</span>` : '<span class="pill p-warn">Manquant</span>'; }
+function unlockForm(next) { return `<form class="panel stack" onsubmit="App.vaultUnlock(event,'${next || ''}')"><div class="row" style="align-items:flex-end"><span class="lockico">${LOCK_ICON}</span><label style="flex:1;min-width:200px">Code du coffre<input type="password" name="code" required autocomplete="current-password"></label><button class="btn primary">Déverrouiller</button></div><p id="vu-err" class="err" hidden></p></form>`; }
+function vaultHow() { return `<section class="panel stack"><h2>Comment c’est protégé</h2><ul class="plain"><li>Le document est chiffré sur l’appareil de l’employé, avant même d’être envoyé.</li><li>Seul ton code permet de le déchiffrer. Même l’hébergeur, ou quelqu’un qui volerait la base de données, ne verrait que du texte illisible.</li><li>Le coffre se verrouille après 5 minutes et à la déconnexion. Après 5 codes erronés, il se bloque une minute.</li><li>Chaque dépôt, consultation et destruction est inscrit au journal des accès. Les entrées de plus de 2 ans s’effacent automatiquement.</li></ul></section>`; }
+function vaultLogSection() {
+  const all = st.data.vlog || []; const f = st.logFilter || (st.logFilter = { emp: '', action: '', n: 20 });
+  const emps = [...new Set(all.map(l => l.emp_name).filter(Boolean))].sort((a, b) => a.localeCompare(b)); const acts = [...new Set(all.map(l => l.action))].sort();
+  const list = all.filter(l => (!f.emp || l.emp_name === f.emp) && (!f.action || l.action === f.action)); const shown = list.slice(0, f.n);
+  return `<section class="section"><div class="spread"><h2>Journal des accès</h2><div class="row"><select aria-label="Filtrer par employé" onchange="App.logFilter('emp',this.value)" style="width:auto"><option value="">Tous les employés</option>${emps.map(n => `<option ${f.emp === n ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select><select aria-label="Filtrer par action" onchange="App.logFilter('action',this.value)" style="width:auto"><option value="">Toutes les actions</option>${acts.map(a => `<option ${f.action === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></div></div>
+  ${shown.length ? `<div class="tablewrap"><table class="resp"><thead><tr><th>Date</th><th>Action</th><th>Employé</th><th>Document</th></tr></thead><tbody>${shown.map(l => `<tr><td class="num" data-label="Date">${fdt(l.at)}</td><td data-label="Action">${esc(l.action)}</td><td data-label="Employé">${esc(l.emp_name)}</td><td data-label="Document">${esc(l.kind)}</td></tr>`).join('')}</tbody></table></div>` : `<div class="list"><p class="empty">${all.length ? 'Aucune entrée ne correspond à ces filtres.' : 'Aucune activité pour le moment.'}</p></div>`}
+  <div class="spread"><span class="small muted num">${shown.length} sur ${list.length} entrée${list.length > 1 ? 's' : ''} · les entrées de plus de 2 ans s’effacent automatiquement</span>${list.length > shown.length ? `<button class="btn sm" onclick="App.logMore()">Voir plus</button>` : ''}</div></section>`;
+}
+function vaultView() {
+  const head = `<div><p class="eyebrow">Employés</p><h1>Coffre sécurisé</h1></div>`;
+  if (!st.data.vkey) return head + `<section class="panel stack" style="max-width:600px"><h2>Crée le code du coffre</h2><p>Ce code est différent de ton mot de passe. Tu en auras besoin chaque fois que tu voudras consulter un NAS, un spécimen de chèque ou un permis.</p>
+  <form class="stack" onsubmit="App.vaultSetup(event)"><label>Code du coffre (12 caractères ou plus)<input type="password" name="code" minlength="12" required autocomplete="new-password"></label><label>Confirmer le code<input type="password" name="code2" minlength="12" required autocomplete="new-password"></label>
+  <div class="banner crit small"><div><b>Ce code ne peut pas être récupéré.</b> Si tu l’oublies, les documents du coffre seront perdus et les employés devront les envoyer de nouveau. Garde-le dans un gestionnaire de mots de passe ou sur papier, en lieu sûr.</div></div>
+  <p class="small muted">Astuce : une phrase comme « croissant-violet-marche-vers-laval » est plus sûre et plus facile à retenir qu’un mot de passe compliqué.</p>
+  <p id="vs-err" class="err" hidden></p><div><button class="btn primary">Activer le coffre</button></div></form></section>${vaultHow()}`;
+  const act = (st.data.emps || []).filter(e => e.active); const items = st.data.secMeta || [];
+  const done = act.filter(e => kindsFor(e).every(k => items.some(x => x.employee_id === e.id && x.kind === k))).length;
+  const bar = V.key ? `<div class="banner acc"><div class="row"><span class="lockico">${LOCK_ICON}</span><div><b>Coffre ouvert</b><br><span class="small">Verrouillage automatique à ${new Date(V.until).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}</span></div></div><button class="btn" onclick="App.vaultLock()">Verrouiller maintenant</button></div>` : unlockForm('');
+  return head + bar + `<section class="section"><div class="spread"><h2>Documents reçus</h2><span class="num"><b>${done}</b> sur ${act.length} dossiers complets</span></div>
+  <div class="tablewrap"><table><thead><tr><th>Employé</th><th>NAS</th><th>Spécimen de chèque</th><th>Permis</th><th></th></tr></thead><tbody>${act.map(e => `<tr><td><b>${esc(fullname(e))}</b><br><span class="muted small">${esc(e.poste)}</span></td><td>${secureCell(e, items, 'nas')}</td><td>${secureCell(e, items, 'cheque')}</td><td>${secureCell(e, items, 'permis')}</td><td class="r">${items.some(x => x.employee_id === e.id) ? `<button class="btn sm" onclick="App.vaultOpen('${e.id}')">Consulter</button>` : ''}</td></tr>`).join('')}</tbody></table></div>
+  <p class="small muted">L’état des dépôts est visible sans code. Le contenu, lui, exige le code.</p></section>
+  ${vaultLogSection()}
+  <details class="panel"><summary>Changer le code du coffre</summary><form class="stack" style="max-width:420px" onsubmit="App.vaultChange(event)"><label>Code actuel<input type="password" name="old" required autocomplete="current-password"></label><label>Nouveau code<input type="password" name="nw" minlength="12" required autocomplete="new-password"></label><label>Confirmer le nouveau code<input type="password" name="cf" minlength="12" required autocomplete="new-password"></label><p id="vc-err" class="err" hidden></p><div><button class="btn primary">Changer le code</button></div></form></details>
+  ${vaultHow()}`;
+}
+function adminSecureTab(e) {
+  if (!st.data.vaultOn) return `<div class="list"><div class="item"><div class="grow"><b>Le coffre sécurisé n’est pas encore activé.</b><span class="muted small">Crée ton code pour que les employés puissent envoyer leur NAS, leur spécimen de chèque et leur permis.</span></div><button class="btn primary" onclick="App.go('vault')">Activer le coffre</button></div></div>`;
+  const items = st.data.empSec || []; const kinds = [...new Set([...kindsFor(e), ...items.map(x => x.kind)])];
+  return `<div class="list">${kinds.map(k => `<div class="item"><div class="grow"><b>${SECURE_KINDS[k].label}</b></div>${secureCell(e, items, k)}</div>`).join('')}</div>
+  <div class="row">${items.length ? `<button class="btn primary" onclick="App.vaultOpen('${e.id}')">${LOCK_ICON} Consulter avec le code</button>` : ''}${/livr/.test(slug(e.poste)) ? '' : `<button class="btn" onclick="App.togglePermis('${e.id}')">${e.needs_permis ? 'Ne plus demander le permis de conduire' : 'Demander aussi le permis de conduire'}</button>`}</div>
+  <p class="small muted">${esc(e.first_name)} envoie ces documents depuis son espace, section « Confidentiel ».</p>`;
+}
+function mySecure() {
+  const e = st.me; const head = `<div class="stack" style="gap:6px"><p class="eyebrow">Mon dossier</p><h1>Renseignements confidentiels</h1></div>`;
+  if (!st.data.vpub) return head + `<div class="list"><p class="empty">Cette section n’est pas encore activée. La direction t’avisera quand tu pourras y envoyer tes documents.</p></div>`;
+  const status = st.data.mySec || [];
+  return head + `<section class="panel stack"><div class="row"><span class="lockico">${LOCK_ICON}</span><h2>Comment tes renseignements sont protégés</h2></div><ul class="plain">
+  <li><b>Chiffrés sur ton appareil</b>, avant même d’être envoyés.</li>
+  <li><b>Une seule personne peut les lire :</b> la direction, avec un code qu’elle seule connaît. Chaque consultation est inscrite dans un journal.</li>
+  <li><b>Utilisés seulement pour la raison indiquée</b> sous chaque document, puis détruits quand ils ne sont plus nécessaires.</li>
+  <li>Tu peux demander à les consulter, à les corriger ou à les faire retirer en t’adressant à la personne responsable de la protection des renseignements personnels de l’entreprise.</li></ul>
+  <p class="small muted">Une fois envoyé, un document ne s’affiche plus ici, même pour toi. Tu peux le remplacer en tout temps.</p></section>
+  ${kindsFor(e).map(k => {
+    const it = status.find(x => x.kind === k), K = SECURE_KINDS[k], showForm = !it || st.secRep === k;
+    const field = k === 'nas' ? `<label>Ton numéro d’assurance sociale<input name="v" inputmode="numeric" autocomplete="off" required placeholder="000 000 000" maxlength="11"></label>`
+      : `<label>Prends une photo ou choisis un fichier<input type="file" name="f" accept="image/*" required onchange="App.previewPhoto(this,'pv-${k}')"></label><img id="pv-${k}" class="secimg" hidden alt="Aperçu de la photo" style="max-width:280px">`;
+    return `<article class="panel stack"><div class="spread"><div><h3>${K.label}</h3><p class="small muted">${K.why}</p></div>${it ? `<span class="pill p-ok">Envoyé le ${fd(it.created_at)}</span>` : '<span class="pill p-warn">À fournir</span>'}</div>
+    ${showForm ? `<form class="stack" onsubmit="App.secureSend(event,'${k}')">${field}<label class="check"><input type="checkbox" name="ok" required><span>J’accepte que ce renseignement soit utilisé pour la raison indiquée ci-dessus.</span></label><p id="err-${k}" class="err" hidden></p><div class="row"><button class="btn primary">${LOCK_ICON} Envoyer de façon sécurisée</button>${it ? `<button type="button" class="btn ghost" onclick="App.secRep(null)">Annuler</button>` : ''}</div></form>` : `<div><button class="btn sm" onclick="App.secRep('${k}')">Remplacer</button></div>`}</article>`;
+  }).join('')}`;
+}
+
+/* ---------- Accidents de travail ---------- */
+const ACC_ST = { 'à traiter': ['p-warn', 'À compléter'], 'complété': ['p-ok', 'Complété'] };
+const PLACES = ['Laval', 'Montréal', 'Production', 'Livraison', 'Autre'];
+function accTypeLabel(a) { return a.kind === 'incident' ? 'Incident sans blessure' : a.kind === 'premiers' ? 'Premiers soins seulement' : a.off_days > 0 ? 'Accident avec arrêt de travail' : 'Accident sans arrêt de travail'; }
+function accColor(a) { return a.kind === 'incident' ? 'var(--muted)' : a.off_days > 0 ? 'var(--crit)' : 'var(--warn)'; }
+function accRows(list, empty) {
+  if (!list.length) return `<div class="list"><p class="empty">${empty || 'Aucun.'}</p></div>`;
+  return `<div class="list">${list.map(a => `<div class="item"><div class="grow"><b><span class="sev" style="background:${accColor(a)}"></span>${esc(fullname(empById(a.employee_id)) || 'Ancien employé')} · ${fd(a.date)}${a.time ? ` à ${esc(a.time)}` : ''}</b><span class="small">${esc(accTypeLabel(a))}${a.injury ? ` · ${esc(a.injury)}` : ''}</span><span class="muted small">${esc(a.place)}${a.declared_by === 'employé' ? ' · déclaré par l’employé' : ''}</span></div><div class="row">${a.cnesst ? '<span class="pill p-mute">CNESST avisée</span>' : ''}<span class="pill ${ACC_ST[a.status][0]}">${ACC_ST[a.status][1]}</span><button class="btn sm" onclick="App.accForm('${a.id}')">Ouvrir</button></div></div>`).join('')}</div>`;
+}
+function accView() {
+  const y = thisYear(), list = st.data.accs || [], ys = list.filter(a => a.date.startsWith(String(y)));
+  const lost = ys.reduce((t, a) => t + (Number(a.off_days) || 0), 0), last = list.find(a => a.kind !== 'incident');
+  const since = last ? Math.round((new Date(TODAY) - new Date(last.date)) / 864e5) : null; const open = list.filter(a => a.status === 'à traiter');
+  return `<div class="spread"><div><p class="eyebrow">Santé et sécurité</p><h1>Accidents de travail</h1></div><button class="btn primary" onclick="App.accForm()">Inscrire un accident</button></div>
+  <div class="tiles"><div class="tile" style="cursor:default"><b>${ys.length}</b><span>événements inscrits en ${y}</span></div><div class="tile" style="cursor:default"><b>${lost}</b><span>jours de travail perdus en ${y}</span></div><div class="tile" style="cursor:default"><b>${since === null ? '—' : since}</b><span>jours depuis le dernier accident</span></div></div>
+  ${open.length ? `<section class="section"><h2>À compléter</h2>${accRows(open)}</section>` : ''}
+  <section class="section"><h2>Registre</h2>${accRows(list.filter(a => a.status !== 'à traiter'), 'Aucun accident inscrit.')}</section>
+  <section class="panel stack"><h2>Rappels</h2><ul class="plain"><li>Inscris au registre tout accident, incident ou premiers soins donnés, même sans gravité. La CNESST exige un registre des premiers soins et premiers secours.</li><li>Si l’employé ne peut pas terminer sa journée ou doit s’absenter, tu lui paies la journée de l’accident au complet. Pour une absence plus longue, informe-toi auprès de la CNESST de la marche à suivre et des formulaires à remplir.</li><li>Ce registre contient des renseignements de santé : seule la direction y a accès.</li></ul></section>`;
+}
+function myAcc() {
+  const e = st.me; const list = st.data.myAccs || [];
+  return `<div class="stack" style="gap:6px"><p class="eyebrow">Messages</p><h1>Déclarer un accident</h1><p class="muted">Tu t’es blessé(e) au travail, même légèrement? Avise d’abord ton superviseur, puis déclare-le ici. Ça protège tes droits si la blessure s’aggrave plus tard.</p></div>
+  <form class="panel stack" onsubmit="App.accDeclare(event)"><h2>Déclarer un accident</h2><div class="two"><label>Date<input type="date" name="date" required max="${TODAY}" value="${TODAY}"></label><label>Heure approximative<input type="time" name="time"></label>
+  <label>Lieu<select name="place">${PLACES.map(m => `<option ${e.magasin === m ? 'selected' : ''}>${m}</option>`).join('')}</select></label><label>Partie du corps touchée<input name="injury" placeholder="Ex. main gauche, dos"></label></div>
+  <label>Que s’est-il passé?<textarea name="desc" required placeholder="Décris ce que tu faisais et comment c’est arrivé."></textarea></label>
+  <div class="two"><label>Témoins (facultatif)<input name="witness"></label><label>As-tu reçu des premiers soins?<select name="aid"><option value="">Non</option><option>Oui, sur place</option><option>Oui, à la clinique ou à l’hôpital</option></select></label></div>
+  <p id="ad-err" class="err" hidden></p><div><button class="btn primary">Envoyer la déclaration</button></div></form>
+  <section class="section"><h2>Mes déclarations</h2>${list.length ? `<div class="list">${list.map(a => `<div class="item"><div class="grow"><b>${fd(a.date)} · ${esc(a.place)}</b><span class="muted small">${esc(a.injury || accTypeLabel(a))}</span></div><span class="pill ${a.status === 'à traiter' ? 'p-warn' : 'p-ok'}">${a.status === 'à traiter' ? 'Reçue' : 'Traitée'}</span></div>`).join('')}</div>` : '<div class="list"><p class="empty">Aucune déclaration.</p></div>'}</section>`;
+}
+
+/* ---------- Clés ---------- */
+const KEY_ICON = '<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="6.5" cy="10" r="3.5"/><path d="M10 10h8M15 10v3M17.5 10v2"/></svg>';
+function keysCard(e) {
+  const ks = st.data.empKeys || []; const held = ks.filter(k => !k.returned), back = ks.filter(k => k.returned).sort((a, b) => a.returned < b.returned ? 1 : -1);
+  return `<section class="panel stack"><div class="spread"><div class="row"><span class="lockico">${KEY_ICON}</span><h2>Clés et accès</h2></div><div class="row">${held.length ? `<span class="pill p-warn">${held.length} clé${held.length > 1 ? 's' : ''} en sa possession</span>` : '<span class="pill p-mute">Aucune clé en sa possession</span>'}<button class="btn sm" onclick="App.keyForm('${e.id}')">Inscrire une clé remise</button></div></div>
+  ${held.length ? `<div class="list">${held.map(k => `<div class="item"><div class="grow"><b>${esc(k.descr)}${k.number ? ` <span class="muted" style="font-weight:400">· n° ${esc(k.number)}</span>` : ''}</b><span class="muted small">Remise le ${fd(k.given)}</span></div><button class="btn sm" onclick="App.keyReturn('${k.id}')">Marquer comme rendue</button></div>`).join('')}</div>` : ''}
+  ${back.length ? `<details><summary class="small muted" style="cursor:pointer">Clés rendues (${back.length})</summary><div class="list" style="margin-top:8px">${back.map(k => `<div class="item"><div class="grow"><span>${esc(k.descr)}${k.number ? ` · n° ${esc(k.number)}` : ''}</span><span class="muted small">Remise le ${fd(k.given)} · rendue le ${fd(k.returned)}</span></div></div>`).join('')}</div></details>` : ''}</section>`;
+}
+
+/* ---------- Anniversaires de service ---------- */
+const MILESTONES = [1, 2, 3, 5, 10, 15, 20, 25, 30];
+function anniversaries(back, ahead) {
+  const t = new Date(TODAY + 'T12:00'); const out = []; const recs = st.data.recogs || [];
+  (st.data.emps || []).filter(e => e.active).forEach(e => { const s = new Date(e.start_date + 'T12:00'); [t.getFullYear() - 1, t.getFullYear(), t.getFullYear() + 1].forEach(y => { const d = new Date(y, s.getMonth(), s.getDate(), 12); const yrs = y - s.getFullYear(); const diff = Math.round((d - t) / 864e5); if (yrs >= 1 && diff >= -back && diff <= ahead) out.push({ e, yrs, date: iso(d), diff, done: recs.some(r => r.employee_id === e.id && r.years === yrs) }); }); });
+  return out.sort((a, b) => a.diff - b.diff);
+}
+function annivSection() {
+  const list = anniversaries(30, 60); if (!list.length) return '';
+  return `<section class="section"><h2>Anniversaires de service</h2><div class="list">${list.map(a => `<div class="item"><div class="milestone">${a.yrs}<small>an${a.yrs > 1 ? 's' : ''}</small></div><div class="grow"><b>${esc(fullname(a.e))}</b><span class="muted small">${a.diff === 0 ? 'Aujourd’hui' : a.diff > 0 ? `Le ${fd(a.date)}, dans ${a.diff} jour${a.diff > 1 ? 's' : ''}` : `Le ${fd(a.date)}, il y a ${-a.diff} jour${a.diff < -1 ? 's' : ''}`}${MILESTONES.includes(a.yrs) && a.yrs >= 3 ? ' · étape importante' : ''}</span></div>${a.done ? '<span class="pill p-ok">Souligné</span>' : `<button class="btn sm${a.diff <= 7 ? ' primary' : ''}" onclick="App.recogForm('${a.e.id}',${a.yrs},'${a.date}')">Souligner</button>`}</div>`).join('')}</div></section>`;
+}
+function myRecog() {
+  const r = (st.data.myRecogs || []).filter(x => (new Date(TODAY) - new Date(x.date)) / 864e5 <= 30 && x.date <= TODAY).sort((a, b) => a.date < b.date ? 1 : -1)[0]; if (!r) return '';
+  return `<section class="recog"><div class="yrs">${r.years}<span style="font-size:1rem;display:block">an${r.years > 1 ? 's' : ''}</span></div><div class="stack" style="gap:6px;flex:1;min-width:200px"><span class="eyebrow">Anniversaire de service · ${fd(r.date)}</span><p style="white-space:pre-wrap">${esc(r.msg)}</p>${r.gift ? `<span class="small muted">Petite attention : ${esc(r.gift)}</span>` : ''}</div></section>`;
+}
+
+/* ---------- Formation ---------- */
+const LOCK_SM = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2" stroke="currentColor" stroke-width="1.4"/></svg>';
+function trainMods() { const T = st.data.train || { mods: [], les: [] }; return T.mods.map(m => ({ ...m, lessons: T.les.filter(l => l.module_id === m.id).sort((a, b) => a.position - b.position) })).sort((a, b) => a.position - b.position); }
+function trainFor(e) { const t = teamOf(e); return trainMods().filter(m => m.aud === 'all' || m.aud === t); }
+const trainFlat = e => trainFor(e).flatMap(m => m.lessons.map(l => ({ m, l })));
+const doneMap = eid => Object.fromEntries((st.data.train?.done || []).filter(d => d.employee_id === eid).map(d => [d.lesson_id, d.done_at]));
+function trainProg(e) { const f = trainFlat(e), dm = doneMap(e.id); const d = f.filter(x => dm[x.l.id]).length; return { d, t: f.length, pct: f.length ? Math.round(d / f.length * 100) : 0 }; }
+function trainUnlocked(e, lid, dm) { const f = trainFlat(e); const i = f.findIndex(x => x.l.id === lid); if (i < 0) return false; return f.slice(0, i).every(x => dm[x.l.id]); }
+function empTrainView() {
+  const e = st.me; const mods = trainFor(e); if (!mods.length) return `<div><p class="eyebrow">Formation</p><h1>Formation</h1></div><div class="list"><p class="empty">Aucune formation pour le moment.</p></div>`;
+  const dm = doneMap(e.id); const p = trainProg(e); const flat = trainFlat(e); if (!flat.length) return `<div><p class="eyebrow">Formation</p><h1>Formation</h1></div><div class="list"><p class="empty">Aucune section pour le moment.</p></div>`;
+  let cur = flat.find(x => x.l.id === st.trainCur && trainUnlocked(e, x.l.id, dm)); if (!cur) cur = flat.find(x => !dm[x.l.id]) || flat[flat.length - 1];
+  const idx = flat.findIndex(x => x.l.id === cur.l.id); const done = !!dm[cur.l.id]; const nxt = flat[idx + 1];
+  const plan = mods.map(m => `<div class="tmod"><b>${esc(m.title)}</b>${m.lessons.map(l => { const ok = dm[l.id], un = trainUnlocked(e, l.id, dm); return `<button class="tles${l.id === cur.l.id ? ' cur' : ''}" ${un ? `onclick="App.trainGo('${l.id}')"` : 'disabled'} aria-current="${l.id === cur.l.id}"><span class="tico ${ok ? 'ok' : ''}">${ok ? '✓' : un ? '' : LOCK_SM}</span><span>${esc(l.title)}</span></button>`; }).join('')}</div>`).join('');
+  return `<div class="stack" style="gap:6px"><p class="eyebrow">Formation</p><h1>Formation</h1><p class="muted">Lis chaque section attentivement, puis confirme que tu l’as comprise pour passer à la suivante.</p></div>
+  <section class="panel stack"><div class="spread"><b>${p.d === p.t ? 'Formation terminée. Bravo!' : `${p.d} sur ${p.t} sections complétées`}</b><span class="num small">${p.pct} %</span></div><div class="prog"><div class="bar"><i style="width:${p.pct}%"></i></div></div></section>
+  <div class="trainwrap"><aside class="panel tplan"><details ${isMob() ? '' : 'open'}><summary><b>Plan de la formation</b></summary><div class="stack" style="gap:12px;margin-top:10px">${plan}</div></details></aside>
+  <article class="panel stack tles-body"><span class="eyebrow">${esc(cur.m.title)} · section ${idx + 1} sur ${flat.length}</span><h2>${esc(cur.l.title)}</h2><div class="hb-text" style="padding:0;max-width:68ch">${hbRender(cur.l.body)}</div>
+  <div class="tconfirm">${done ? `<span class="check-ok">✓ Lu et compris le ${fd(dm[cur.l.id])}</span>` : `<label class="check" style="font-weight:600"><input type="checkbox" onchange="document.getElementById('tr-next').disabled=!this.checked"><span>J’ai lu et compris cette section</span></label>`}
+  <div class="row">${done ? (nxt ? `<button class="btn primary" onclick="App.trainGo('${nxt.l.id}')">Section suivante →</button>` : '') : `<button class="btn primary" id="tr-next" disabled onclick="App.trainDone('${cur.l.id}')">${nxt ? 'Confirmer et continuer →' : 'Confirmer et terminer'}</button>`}</div></div></article></div>`;
+}
+function adminTrainView() {
+  const mods = trainMods(); const act = (st.data.emps || []).filter(e => e.active);
+  const audPill = a => `<span class="pill ${a === 'vente' ? 'p-acc' : a === 'prod' ? 'p-warn' : 'p-mute'}" style="vertical-align:middle">${a === 'vente' ? 'Vente' : a === 'prod' ? 'Production' : 'Tous'}</span>`;
+  return `<div class="spread"><div><p class="eyebrow">Employés</p><h1>Formation</h1></div><button class="btn primary" onclick="App.trainModForm()">Nouveau module</button></div>
+  <section class="section"><h2>Modules</h2>${mods.length ? mods.map((m, i) => `<section class="panel stack"><div class="spread"><div><h3 style="font-size:1.25rem">${esc(m.title)} ${audPill(m.aud)}</h3><span class="small muted">${m.lessons.length} section${m.lessons.length > 1 ? 's' : ''}</span></div><div class="row" style="gap:4px"><button class="btn ghost sm" onclick="App.trainModMove(${i},-1)" ${i === 0 ? 'disabled' : ''} aria-label="Monter">↑</button><button class="btn ghost sm" onclick="App.trainModMove(${i},1)" ${i === mods.length - 1 ? 'disabled' : ''} aria-label="Descendre">↓</button><button class="btn sm" onclick="App.trainModForm('${m.id}')">Modifier le module</button></div></div>
+    <div class="checklist">${m.lessons.map((l, j) => `<div class="ck" style="align-items:center"><span class="milestone" style="font-size:1rem;min-width:24px">${j + 1}</span><div class="grow"><b>${esc(l.title)}</b><span class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.body.replace(/\s+/g, ' ').slice(0, 100))}</span></div><div class="row" style="gap:4px"><button class="btn ghost sm" onclick="App.trainLesMove('${m.id}',${j},-1)" ${j === 0 ? 'disabled' : ''} aria-label="Monter">↑</button><button class="btn ghost sm" onclick="App.trainLesMove('${m.id}',${j},1)" ${j === m.lessons.length - 1 ? 'disabled' : ''} aria-label="Descendre">↓</button><button class="btn sm" onclick="App.trainLesForm('${m.id}','${l.id}')">Modifier</button></div></div>`).join('')}</div>
+    <div><button class="btn sm" onclick="App.trainLesForm('${m.id}')">Ajouter une section</button></div></section>`).join('') : '<div class="list"><p class="empty">Aucun module. Crée ton premier module de formation.</p></div>'}</section>
+  <section class="section"><h2>Suivi des employés</h2><div class="tablewrap"><table class="resp"><thead><tr><th>Employé</th><th>Progression</th><th class="r">Sections</th><th>Dernière section complétée</th></tr></thead><tbody>${act.filter(e => trainFor(e).length).sort((a, b) => trainProg(a).pct - trainProg(b).pct || a.last_name.localeCompare(b.last_name)).map(e => { const p = trainProg(e); const last = Object.entries(doneMap(e.id)).sort((a, b) => a[1] < b[1] ? 1 : -1)[0]; const ll = last ? trainFlat(e).find(x => x.l.id === last[0]) : null;
+    return `<tr><td data-label="Employé"><b>${esc(fullname(e))}</b><br><span class="small muted">${esc(e.magasin)}</span></td><td data-label="Progression" style="min-width:160px"><div class="prog"><div class="bar"><i style="width:${p.pct}%"></i></div><span class="small num">${p.pct} %</span></div></td><td class="r num" data-label="Sections">${p.d}/${p.t}</td><td data-label="Dernière">${ll ? `${esc(ll.l.title)}<br><span class="small muted">${fd(last[1])}</span>` : '<span class="muted">Pas commencée</span>'}</td></tr>`; }).join('')}</tbody></table></div></section>`;
+}
+
+/* ---------- Auto-évaluation ---------- */
+const RATE_LBL = ['', 'À améliorer', 'Parfois', 'Correct', 'Très bien', 'Excellent'];
+const EV_ST = { 'à remplir': ['p-warn', 'À remplir'], brouillon: ['p-acc', 'Commencée'], remise: ['p-ok', 'Remise'] };
+const evPill = s => `<span class="pill ${EV_ST[s][0]}">${EV_ST[s][1]}</span>`;
+function evalAvg(v) { const vals = Object.values(v.answers.r || {}).map(Number).filter(Boolean); return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null; }
+function evalForm(v) {
+  const qq = v.tpl, a = v.answers;
+  return `<form class="stack" id="ev-form" onsubmit="App.evalSubmit(event,'${v.id}')">
+  <section class="panel stack"><h2>Comment évalues-tu ton travail?</h2><p class="small muted">1 = à améliorer · 5 = excellent</p>
+  ${qq.ratings.map((t, i) => `<fieldset class="rate"><legend>${esc(t)}</legend><div class="rates">${[1, 2, 3, 4, 5].map(n => `<label class="rbtn"><input type="radio" name="r${i}" value="${n}" ${Number(a.r[i]) === n ? 'checked' : ''}><span>${n}</span><small>${RATE_LBL[n]}</small></label>`).join('')}</div></fieldset>`).join('')}</section>
+  <section class="panel stack"><h2>En tes mots</h2>${qq.open.map((t, i) => `<label>${esc(t)}<textarea name="o${i}" maxlength="3000">${esc(a.o[i] || '')}</textarea></label>`).join('')}</section>
+  <p id="ev-err" class="err" hidden></p><div class="row"><button type="button" class="btn" onclick="App.evalDraft('${v.id}')">Enregistrer le brouillon</button><button class="btn primary">Remettre à la direction</button></div><p class="small muted">Une fois remise, ton auto-évaluation ne peut plus être modifiée.</p></form>`;
+}
+function evalAnswers(v) {
+  const qq = v.tpl, a = v.answers; const avg = evalAvg(v);
+  return `<div class="stack"><div class="spread"><span class="muted">${v.submitted_at ? `Remise le ${fdt(v.submitted_at)}` : 'Pas encore remise'}</span>${avg ? `<span>Moyenne : <b class="payh" style="font-size:1.4rem">${avg.toFixed(1).replace('.', ',')}</b> / 5</span>` : ''}</div>
+  <div class="list">${qq.ratings.map((t, i) => `<div class="item"><div class="grow"><span>${esc(t)}</span></div><span class="dots" aria-label="${a.r[i] || 0} sur 5">${[1, 2, 3, 4, 5].map(n => `<i class="${n <= Number(a.r[i] || 0) ? 'on' : ''}"></i>`).join('')}</span><b class="num" style="min-width:24px;text-align:right">${a.r[i] || '—'}</b></div>`).join('')}</div>
+  ${qq.open.map((t, i) => `<div class="stack" style="gap:4px"><b>${esc(t)}</b><p style="white-space:pre-wrap">${a.o[i] ? esc(a.o[i]) : '<span class="muted">Aucune réponse</span>'}</p></div>`).join('')}</div>`;
+}
+function adminEvalView() {
+  const all = st.data.evals || []; const years = [...new Set(all.map(v => v.year))].sort((a, b) => b - a); const cy = thisYear();
+  const y = st.evalYear && years.includes(st.evalYear) ? st.evalYear : (years.includes(cy) ? cy : (years[0] || cy));
+  const o = { 'à remplir': 0, brouillon: 1, remise: 2 };
+  const list = all.filter(v => v.year === y).sort((a, b) => o[a.status] - o[b.status] || fullname(empById(a.employee_id)).localeCompare(fullname(empById(b.employee_id))));
+  const done = list.filter(v => v.status === 'remise').length; const pct = list.length ? Math.round(done / list.length * 100) : 0;
+  const missing = (st.data.emps || []).filter(e => e.active && !list.some(v => v.employee_id === e.id)); const hasThisYear = years.includes(cy); const due = list.find(v => v.due)?.due;
+  return `<div class="spread"><div><p class="eyebrow">Employés</p><h1>Auto-évaluations</h1></div><div class="row"><button class="btn" onclick="App.evalTplForm()">Modifier les questions</button>${hasThisYear ? '' : `<button class="btn primary" onclick="App.evalLaunchForm()">Lancer l’auto-évaluation ${cy}</button>`}</div></div>
+  ${years.length > 1 ? `<div class="tabs" role="tablist">${years.map(yy => `<button role="tab" aria-selected="${yy === y}" onclick="App.evalYearTab(${yy})">${yy}</button>`).join('')}</div>` : ''}
+  ${!list.length ? `<section class="panel stack"><h2>Auto-évaluation annuelle ${cy}</h2><p>Une fois par année, tous les employés actifs reçoivent leur auto-évaluation en même temps, par courriel et sur leur page d’accueil. Tu peux ensuite lire chaque réponse avant de décider des augmentations.</p><div><button class="btn primary" onclick="App.evalLaunchForm()">Lancer l’auto-évaluation ${cy}</button></div></section>` : `
+  <section class="panel stack"><div class="spread"><div><h2>Auto-évaluation ${y}</h2><p class="small muted">Envoyée le ${fd(list[0].sent)}${due ? ` · à remettre avant le ${fd(due)}` : ''}</p></div><span class="num"><b>${done}</b> sur ${list.length} remises</span></div>
+  <div class="prog"><div class="bar"><i style="width:${pct}%"></i></div><span class="small num">${pct} %</span></div>
+  <div class="row">${list.length - done ? `<button class="btn sm" onclick="App.evalRemindAll(${y})">Envoyer un rappel aux ${list.length - done} retardataire${list.length - done > 1 ? 's' : ''}</button>` : ''}${y === cy && missing.length ? `<button class="btn sm" onclick="App.evalAddForm()">Ajouter un employé (${missing.length} sans auto-évaluation)</button>` : ''}</div></section>
+  <section class="section"><h2>Employés</h2><div class="tablewrap"><table class="resp"><thead><tr><th>Employé</th><th>Statut</th><th>Remise le</th><th class="r">Moyenne</th><th></th></tr></thead><tbody>${list.map(v => { const e = empById(v.employee_id); const avg = evalAvg(v); return `<tr><td data-label="Employé"><b>${esc(e ? fullname(e) : 'Ancien employé')}</b>${e ? `<br><span class="small muted">${esc(e.poste)}</span>` : ''}</td><td data-label="Statut">${evPill(v.status)}${v.status === 'remise' && !v.seen ? ' <span class="pill p-acc">Nouveau</span>' : ''}</td><td data-label="Remise le">${v.submitted_at ? fd(v.submitted_at) : '—'}</td><td class="r num" data-label="Moyenne">${v.status === 'remise' && avg ? avg.toFixed(1).replace('.', ',') : '—'}</td><td class="r" data-label=" ">${v.status === 'remise' ? `<button class="btn sm" onclick="App.evalOpen('${v.id}')">Lire</button>` : `<button class="btn sm ghost" onclick="App.evalRemind('${v.id}')">Rappel</button>`}</td></tr>`; }).join('')}</tbody></table></div></section>`}`;
+}
+function empEvalView() {
+  const mine = st.data.myEvals || []; const open = mine.find(v => v.status !== 'remise'); const done = mine.filter(v => v.status === 'remise');
+  return `<div class="stack" style="gap:6px"><p class="eyebrow">Mon dossier</p><h1>Auto-évaluation</h1><p class="muted">Prends le temps de réfléchir à ton travail depuis ta dernière évaluation. Tes réponses aident la direction à préparer ta révision salariale. Sois honnête : il n’y a pas de mauvaise réponse.</p></div>
+  ${open ? `${open.due ? `<div class="banner acc"><div><b>À remettre avant le ${fd(open.due)}</b>${open.status === 'brouillon' ? '<br><span class="small">Ton brouillon est enregistré. Tu peux continuer quand tu veux.</span>' : ''}</div></div>` : ''}${evalForm(open)}` : '<div class="list"><p class="empty">Aucune auto-évaluation à remplir pour le moment.</p></div>'}
+  ${done.length ? `<section class="section"><h2>Mes auto-évaluations remises</h2><div class="list">${done.map(v => `<div class="item"><div class="grow"><b>${v.year} · remise le ${fd(v.submitted_at)}</b></div><button class="btn sm" onclick="App.evalOpen('${v.id}')">Revoir</button></div>`).join('')}</div></section>` : ''}`;
+}
+function empEvalCard() {
+  const v = (st.data.empEvals || [])[0]; if (!v) return '';
+  return `<section class="panel stack"><div class="spread"><div><h2>Auto-évaluation ${v.year}</h2><p class="small muted">Envoyée le ${fd(v.sent)}${v.submitted_at ? ` · remise le ${fd(v.submitted_at)}` : ''}</p></div><div class="row">${evPill(v.status)}${v.status === 'remise' ? `<button class="btn sm" onclick="App.evalOpen('${v.id}')">Lire</button>` : ''}</div></div></section>`;
+}
+
+/* ---------- Liste d'accueil ---------- */
+function onbAuto(info, ctrs, secKinds, kinds, hbRead, vaultOn) {
+  return [
+    { id: 'auto-pw', label: 'Choisir son mot de passe', done: true, page: 'macct' },
+    { id: 'auto-info', label: 'Remplir sa fiche d’embauche', done: infoDone(info), page: 'minfo' },
+    ...(vaultOn ? [{ id: 'auto-secure', label: 'Envoyer NAS et spécimen de chèque', done: kinds.every(k => secKinds.includes(k)), page: 'msecure' }] : []),
+    { id: 'auto-contrat', label: 'Signer son contrat de travail', done: ctrs.some(c => c.emp_sig_at), page: 'mcontract' },
+    { id: 'auto-cahier', label: 'Lire le cahier de l’employé', done: hbRead, page: 'home' },
+  ].map(x => ({ ...x, auto: true }));
+}
+function onbTab(e) {
+  const o = st.data.empOnb;
+  if (!o) return `<div class="list"><div class="item"><div class="grow"><b>Aucune liste d’accueil pour cet employé</b><span class="muted small">Les listes sont créées automatiquement pour les nouveaux employés. Tu peux en démarrer une ici.</span></div><button class="btn primary" onclick="App.onbStart('${e.id}')">Démarrer la liste d’accueil</button></div></div>`;
+  const auto = onbAuto(st.data.empInfo, st.data.empCtr || [], (st.data.empSec || []).map(x => x.kind), kindsFor(e), (st.data.empHbRead || false), st.data.vaultOn);
+  const dn = Object.fromEntries((st.data.empOnbDone || []).map(d => [d.step_id, d.done_at]));
+  const man = (st.data.onbSteps || []).map(t => ({ id: t.id, label: t.label, done: !!dn[t.id], doneAt: dn[t.id] }));
+  const it = [...auto, ...man]; const d = it.filter(x => x.done).length; const pct = Math.round(d / it.length * 100);
+  return `<section class="panel stack"><div class="spread"><div><h2>Liste d’accueil</h2><p class="small muted">Commencée le ${fd(o.started)}${o.closed ? ` · fermée le ${fd(o.closed)}` : ''}</p></div><div class="row">${d === it.length ? '<span class="pill p-ok">Terminée</span>' : `<span class="pill p-warn">${it.length - d} à faire</span>`}</div></div><div class="prog"><div class="bar"><i style="width:${pct}%"></i></div><span class="small num">${d}/${it.length}</span></div>
+  <div class="checklist">${it.map(x => `<div class="ck${x.done ? ' done' : ''}">${x.auto ? `<span class="box" aria-hidden="true">${x.done ? '✓' : ''}</span>` : `<button class="box" onclick="App.onbToggle('${e.id}','${x.id}',${x.done})" aria-label="${x.done ? 'Décocher' : 'Cocher'} : ${esc(x.label)}" aria-pressed="${x.done}">${x.done ? '✓' : ''}</button>`}<div class="grow"><span class="lbl">${esc(x.label)}</span><span class="who-tag">${x.auto ? 'Fait par l’employé · coché automatiquement' : `À faire par toi${x.doneAt ? ` · fait le ${fd(x.doneAt)}` : ''}`}</span></div></div>`).join('')}</div>
+  <div class="row"><button class="btn" onclick="App.onbRemind('${e.id}')">Envoyer un rappel à ${esc(e.first_name)}</button>${o.closed ? `<button class="btn ghost" onclick="App.onbClose('${e.id}',false)">Rouvrir</button>` : `<button class="btn ghost" onclick="App.onbClose('${e.id}',true)">Fermer la liste</button>`}<button class="btn ghost" onclick="App.onbTplForm()">Modifier les étapes</button></div></section>`;
+}
+function myOnb() {
+  const o = st.data.myOnb; if (!o || o.closed) return '';
+  const read = (st.data.myReads || []).some(r => r.version === st.data.hbMeta?.version);
+  const it = onbAuto(st.data.myInfo, st.data.myCtr || [], (st.data.mySec || []).map(x => x.kind), kindsFor(st.me), read, !!st.data.vpub);
+  const left = it.filter(x => !x.done); if (!left.length) return '';
+  return `<section class="panel stack"><div class="spread"><h2>Mes premières étapes</h2><span class="small muted num">${it.length - left.length} sur ${it.length} faites</span></div><div class="checklist">${it.map(x => `<div class="ck${x.done ? ' done' : ''}"><span class="box" aria-hidden="true">${x.done ? '✓' : ''}</span><div class="grow"><span class="lbl">${esc(x.label)}</span></div>${x.done ? '' : `<button class="btn sm" onclick="App.go('${x.page}')">Faire</button>`}</div>`).join('')}</div></section>`;
+}
+
 /* ---------- Pages employé ---------- */
 function empPage() {
   if (st.loading) return loading();
   switch (st.view.page) {
     case 'minfo': return myInfoView(); case 'msal': return `<div><p class="eyebrow">Mon dossier</p><h1>Salaire et avantages</h1></div>${salaryBlock(st.data.mySal, st.data.myPerks, false)}`; case 'macct': return accountView();
     case 'mcontract': return myContracts(); case 'mwarn': return `<div class="stack" style="gap:6px"><p class="eyebrow">Mon dossier</p><h1>Avertissements</h1><p class="muted">Tu dois confirmer avoir pris connaissance de chaque avertissement.</p></div>${warnList(st.data.myWarn, false)}`;
-    case 'mleave': return myLeaves(); case 'mmsg': return empMsgView(); default: return homeView();
+    case 'mleave': return myLeaves(); case 'mmsg': return empMsgView(); case 'msecure': return mySecure(); case 'meval': return empEvalView(); case 'mtrain': return empTrainView(); case 'macc': return myAcc(); default: return homeView();
   }
 }
 function myLeaves() {
@@ -771,6 +1046,10 @@ function homeView() {
   const decided = (d.myLeaves || []).filter(l => !l.seen && ['acceptée', 'refusée'].includes(l.status)); const unread = (d.myThreads || []).filter(t => t.unread_emp).length;
   const toSign = (d.myCtr || []).some(c => !c.emp_sig_at);
   return `<div><p class="eyebrow">${new Date().toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long' })}</p><h1>Bonjour ${esc(e.first_name)}</h1><p class="muted">Membre de l’équipe depuis ${seniority(e.start_date)}</p></div>
+  ${myRecog()}
+  ${myOnb()}
+  ${(() => { const ev = (d.myEvals || []).find(v => v.status !== 'remise'); return ev ? `<div class="banner acc"><div><b>Ton auto-évaluation est prête.</b><br><span class="small">${ev.due ? `À remettre avant le ${fd(ev.due)}.` : 'Remplis-la avant ta révision salariale.'}</span></div><button class="btn primary" onclick="App.go('meval')">${ev.status === 'brouillon' ? 'Continuer' : 'Commencer'}</button></div>` : ''; })()}
+  ${(() => { if (!trainFor(e).length) return ''; const p = trainProg(e); if (!p.t || p.d === p.t) return ''; return `<section class="panel stack"><div class="spread"><div><span class="eyebrow">Formation</span><h2>${p.d ? 'Continue ta formation' : 'Commence ta formation'}</h2></div><button class="btn primary" onclick="App.go('mtrain')">${p.d ? 'Continuer' : 'Commencer'}</button></div><div class="prog"><div class="bar"><i style="width:${p.pct}%"></i></div><span class="small num">${p.d}/${p.t}</span></div></section>`; })()}
   ${w.length ? `<div class="banner crit"><div><b>Tu as ${w.length === 1 ? 'un avertissement' : w.length + ' avertissements'} à lire.</b><br><span class="small">Tu dois confirmer en avoir pris connaissance.</span></div><button class="btn primary" onclick="App.go('mwarn')">Lire maintenant</button></div>` : ''}
   ${props.length ? `<div class="banner acc"><div><b>D’autres dates de vacances te sont proposées.</b><br><span class="small">${range(props[0].prop_start, props[0].prop_end)}</span></div><button class="btn" onclick="App.go('mleave')">Répondre</button></div>` : ''}
   ${decided.map(l => `<div class="banner ${l.status === 'refusée' ? 'crit' : 'acc'}" style="${l.status === 'acceptée' ? 'background:var(--ok-soft);border-color:var(--ok)' : ''}"><div class="stack" style="gap:2px"><b>${l.status === 'acceptée' ? 'Ta demande de vacances est acceptée.' : 'Ta demande de vacances est refusée.'}</b><span class="small">${esc(l.type)} · ${range(l.start_date, l.end_date)}</span>${l.admin_msg ? `<span class="small">Message de la direction : « ${esc(l.admin_msg)} »</span>` : ''}${l.status === 'refusée' ? '<span class="small">Tu peux faire une nouvelle demande à d’autres dates.</span>' : ''}</div><div class="row"><button class="btn primary" onclick="App.go('mleave')">Voir mes congés</button><button class="btn" onclick="App.leaveSeen('${l.id}')">OK, compris</button></div></div>`).join('')}
@@ -808,7 +1087,7 @@ const App = {
     const { error } = await sb.auth.updateUser({ password: f.pw }); if (error) return show(errMsg(error));
     st.needPassword = false; history.replaceState(null, '', location.pathname); toast('Mot de passe enregistré.'); await afterLogin();
   },
-  async logout() { await sb.auth.signOut(); st.session = null; st.screen = null; render(); },
+  async logout() { lockVault(true); await sb.auth.signOut(); st.session = null; st.screen = null; render(); },
   async mfaStart() {
     try { const { data: fl } = await sb.auth.mfa.listFactors(); for (const x of (fl?.all || []).filter(x => x.status !== 'verified')) await sb.auth.mfa.unenroll({ factorId: x.id });
       const { data, error } = await sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Espace équipe ' + Date.now() }); if (error) throw error;
@@ -1157,6 +1436,215 @@ const App = {
   },
   async sickDel(id) { if (!confirm('Retirer cette absence?')) return; try { await q(sb.from('sick_days').delete().eq('id', id)); toast('Absence retirée.'); await loadPage(); } catch (e) { fail(e); } },
   async sickQuota(ev) { const f = formData(ev); try { await q(sb.from('app_settings').update({ sick_per_year: Math.max(0, Math.min(10, parseInt(f.q, 10) || 0)) }).eq('id', 1)); toast('Enregistré.'); await loadPage(); } catch (e) { fail(e); } },
+
+  /* Coffre */
+  async vaultSetup(ev) {
+    const f = formData(ev); const err = m => { const el = $('#vs-err'); el.textContent = m; el.hidden = false; };
+    if (f.code.length < MIN_CODE) return err('Le code doit avoir au moins 12 caractères. Une phrase de 4 ou 5 mots est facile à retenir et très difficile à deviner.'); if (f.code !== f.code2) return err('Les deux codes ne sont pas identiques.');
+    const btn = ev.submitter; if (btn) btn.disabled = true;
+    try {
+      const existing = await q(sb.from('vault_key').select('id')); if (existing.length) { if (btn) btn.disabled = false; return err('Le coffre est déjà activé. Recharge la page.'); }
+      const kp = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength: 3072, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['encrypt', 'decrypt']);
+      const pub = await crypto.subtle.exportKey('spki', kp.publicKey), priv = await crypto.subtle.exportKey('pkcs8', kp.privateKey);
+      await q(sb.from('vault_key').insert({ id: 1, ...(await wrapPriv(priv, f.code)) }));
+      await q(sb.from('vault_pub').insert({ id: 1, pub: b64(pub) }));
+      V.key = await crypto.subtle.importKey('pkcs8', priv, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']);
+      await logVault('Coffre activé'); armVault(); toast('Coffre activé. Les employés peuvent maintenant envoyer leurs documents.'); await loadPage();
+    } catch (x) { if (btn) btn.disabled = false; err(errMsg(x)); }
+  },
+  async vaultUnlock(ev, next) {
+    const f = formData(ev); const err = m => { const el = $('#vu-err'); el.textContent = m; el.hidden = false; };
+    if (Date.now() < V.blocked) return err('Trop d’essais. Réessaie dans une minute.');
+    try {
+      const vk = (await q(sb.from('vault_key').select('*')))[0]; const priv = await unwrapPriv(vk, f.code);
+      V.key = await crypto.subtle.importKey('pkcs8', priv, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']); V.fails = 0; armVault();
+      if (next) App.vaultOpen(next); else render();
+    } catch (x) {
+      V.fails++;
+      if (V.fails >= 5) { V.blocked = Date.now() + 60e3; V.fails = 0; err('Trop d’essais. Le coffre est bloqué pendant une minute.'); } else err(`Code incorrect. ${5 - V.fails} essai${5 - V.fails > 1 ? 's' : ''} restant${5 - V.fails > 1 ? 's' : ''}.`);
+      logVault('Code erroné');
+    }
+  },
+  vaultLock() { lockVault(); toast('Coffre verrouillé.'); },
+  async vaultOpen(eid) {
+    try {
+      const e = (await q(sb.from('employees').select('id,first_name,last_name').eq('id', eid)))[0]; if (!e) return;
+      if (!V.key) { modal('Code du coffre requis', `<p class="muted">Pour consulter les renseignements confidentiels de ${esc(fullname(e))}.</p>${unlockForm(eid)}`); return; }
+      armVault(); const order = Object.keys(SECURE_KINDS);
+      const items = (await q(sb.from('secure_items').select('*').eq('employee_id', eid))).sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+      let html = '';
+      for (const it of items) {
+        let content = ''; try { const o = await openItem(it); content = it.kind === 'nas' ? `<div class="row"><span class="secret">${esc(fmtNas(o.value))}</span><button class="btn sm" onclick="App.copyText('${esc(o.value)}')">Copier</button></div>` : `<img class="secimg" src="${esc(o.value)}" alt="${esc(SECURE_KINDS[it.kind].label)}">`; } catch (x) { content = '<p class="err">Impossible de déchiffrer ce document.</p>'; }
+        html += `<div class="vaultitem"><div class="spread"><div><h3>${SECURE_KINDS[it.kind].label}</h3><span class="muted small">Envoyé le ${fdt(it.created_at)}</span></div><button class="btn sm crit" onclick="App.vaultDestroy('${eid}','${it.id}','${it.kind}')">Détruire</button></div>${content}</div>`;
+      }
+      logVault('Consultation', e, null);
+      modal(`Confidentiel · ${fullname(e)}`, `<div class="banner acc small"><div>Ces renseignements s’effacent de l’écran à la fermeture de cette fenêtre. Ne fais pas de capture d’écran.</div></div><div>${html || '<p class="muted">Aucun document.</p>'}</div>`, true);
+    } catch (x) { fail(x); }
+  },
+  vaultDestroy(eid, id, kind) { modal('Détruire ce document?', `<p>Le document « ${SECURE_KINDS[kind].label} » sera effacé définitivement. L’employé devra l’envoyer de nouveau au besoin.</p><div class="row"><button class="btn primary" style="background:var(--crit);border-color:var(--crit)" onclick="App.vaultDestroyGo('${eid}','${id}','${kind}')">Détruire</button><button class="btn ghost" onclick="App.vaultOpen('${eid}')">Annuler</button></div>`); },
+  async vaultDestroyGo(eid, id, kind) { try { const e = (await q(sb.from('employees').select('id,first_name,last_name').eq('id', eid)))[0]; await q(sb.from('secure_items').delete().eq('id', id)); await logVault('Destruction', e, kind); closeModal(); toast('Document détruit.'); await loadPage(); } catch (x) { fail(x); } },
+  async vaultChange(ev) {
+    const f = formData(ev); const err = m => { const el = $('#vc-err'); el.textContent = m; el.hidden = false; };
+    if (f.nw.length < MIN_CODE) return err('Le nouveau code doit avoir au moins 12 caractères.'); if (f.nw !== f.cf) return err('Les deux nouveaux codes ne sont pas identiques.');
+    try { const vk = (await q(sb.from('vault_key').select('*')))[0]; let priv; try { priv = await unwrapPriv(vk, f.old); } catch (e) { return err('Le code actuel est incorrect.'); }
+      await q(sb.from('vault_key').update({ ...(await wrapPriv(priv, f.nw)), updated_at: new Date().toISOString() }).eq('id', 1)); await logVault('Code du coffre changé'); lockVault(true); toast('Code changé. Le coffre est verrouillé.'); await loadPage();
+    } catch (x) { err(errMsg(x)); }
+  },
+  async togglePermis(eid) { const e = st.data.emp; try { await q(sb.from('employees').update({ needs_permis: !e.needs_permis }).eq('id', eid)); await loadPage(); } catch (x) { fail(x); } },
+  copyText(t) { try { navigator.clipboard.writeText(t).then(() => toast('Copié.'), () => toast('Copie impossible. Sélectionne le numéro à la main.')); } catch (e) { toast('Copie impossible. Sélectionne le numéro à la main.'); } },
+  logFilter(k, v) { st.logFilter[k] = v; st.logFilter.n = 20; render(); },
+  logMore() { st.logFilter.n += 20; render(); },
+  secRep(k) { st.secRep = k; render(); },
+  previewPhoto(input, id) { const f = input.files[0], img = $('#' + id); if (!f) { img.hidden = true; return; } const r = new FileReader(); r.onload = () => { img.src = r.result; img.hidden = false; }; r.readAsDataURL(f); },
+  async secureSend(ev, k) {
+    ev.preventDefault(); const form = ev.target; const err = m => { const el = $('#err-' + k); el.textContent = m; el.hidden = false; };
+    let value;
+    if (k === 'nas') { const d = (form.elements.v.value || '').replace(/\D/g, ''); if (d.length !== 9) return err('Le NAS compte 9 chiffres.'); if (!luhn(d)) return err('Ce NAS ne semble pas valide. Vérifie les chiffres.'); value = d; }
+    else { const file = form.elements.f.files[0]; if (!file) return err('Ajoute une photo.'); if (!/^image\//.test(file.type)) return err('Envoie une photo (JPG ou PNG).'); try { value = await resizeImage(file); } catch (x) { return err('Cette photo ne peut pas être lue. Essaie une photo JPG ou PNG.'); } }
+    const btn = ev.submitter; if (btn) { btn.disabled = true; btn.textContent = 'Chiffrement en cours…'; }
+    try { const sealed = await sealItem(st.data.vpub, { kind: k, value }); value = null; await q(sb.rpc('secure_put', { p_kind: k, p_wk: sealed.wk, p_iv: sealed.iv, p_ct: sealed.ct })); st.secRep = null; toast('Envoyé de façon sécurisée.'); await loadPage(); }
+    catch (x) { if (btn) { btn.disabled = false; btn.innerHTML = LOCK_ICON + ' Envoyer de façon sécurisée'; } err(errMsg(x)); }
+  },
+
+  /* Accidents */
+  accForm(aid) {
+    const act = (st.data.emps || []).filter(x => x.active); const a = aid ? st.data.accs.find(x => x.id === aid) : { date: TODAY, kind: 'accident', place: 'Production', off_days: 0 }; const e = aid ? empById(a.employee_id) : null; const v = k => esc(a[k] || '');
+    modal(aid ? `Accident · ${fullname(e) || 'Ancien employé'}` : 'Inscrire un accident', `<form class="stack" onsubmit="App.accSave(event,'${aid || ''}')">
+    ${aid ? (a.declared_by === 'employé' ? '<div class="banner acc small"><div>Déclaré par l’employé. Complète les champs de la direction puis enregistre.</div></div>' : '') : `<label>Employé<select name="emp" required>${act.map(x => `<option value="${x.id}">${esc(fullname(x))} · ${esc(x.poste)}</option>`).join('')}</select></label>`}
+    <div class="two"><label>Date<input type="date" name="date" required max="${TODAY}" value="${v('date')}"></label><label>Heure<input type="time" name="time" value="${v('time')}"></label>
+    <label>Lieu<select name="place">${PLACES.map(m => `<option ${a.place === m ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+    <label>Type<select name="kind"><option value="incident" ${a.kind === 'incident' ? 'selected' : ''}>Incident sans blessure</option><option value="premiers" ${a.kind === 'premiers' ? 'selected' : ''}>Premiers soins seulement</option><option value="accident" ${a.kind === 'accident' ? 'selected' : ''}>Accident (soins médicaux ou arrêt)</option></select></label></div>
+    <label>Blessure et partie du corps<input name="injury" value="${v('injury')}" placeholder="Ex. coupure, index gauche"></label>
+    <label>Description des faits<textarea name="descr" required>${v('descr')}</textarea></label>
+    <div class="two"><label>Témoins<input name="witness" value="${v('witness')}"></label><label>Premiers soins donnés par<input name="first_aid_by" value="${v('first_aid_by')}"></label>
+    <label>Soins reçus<select name="aid">${['', 'Oui, sur place', 'Oui, à la clinique ou à l’hôpital'].map(o => `<option value="${o}" ${a.aid === o ? 'selected' : ''}>${o || 'Aucun'}</option>`).join('')}</select></label>
+    <label>Jours d’arrêt de travail (après la journée de l’accident)<input type="number" min="0" name="off_days" value="${a.off_days || 0}"></label></div>
+    <label class="check"><input type="checkbox" name="cnesst" ${a.cnesst ? 'checked' : ''}><span>La CNESST a été avisée</span></label>
+    <label>Mesures correctives pour éviter que ça se reproduise<textarea name="actions" placeholder="Ex. tapis antidérapant ajouté près de la plonge">${v('actions')}</textarea></label>
+    <div class="row"><button class="btn primary">Enregistrer au registre</button>${aid ? `<button type="button" class="btn ghost crit" onclick="App.accDel('${aid}')">Retirer du registre</button>` : ''}<button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`, true);
+  },
+  async accSave(ev, aid) {
+    const f = formData(ev); const data = { date: f.date, time: f.time, place: f.place, kind: f.kind, injury: f.injury.trim(), descr: f.descr.trim(), witness: f.witness.trim(), first_aid_by: f.first_aid_by.trim(), aid: f.aid, off_days: Math.max(0, parseInt(f.off_days, 10) || 0), cnesst: !!f.cnesst, actions: f.actions.trim(), status: 'complété' };
+    try { if (aid) await q(sb.from('accidents').update(data).eq('id', aid)); else await q(sb.from('accidents').insert({ ...data, employee_id: f.emp, declared_by: 'admin' })); closeModal(); toast('Registre mis à jour.'); await loadPage(); } catch (e) { fail(e); }
+  },
+  async accDel(aid) { if (!confirm('Retirer cet événement du registre?')) return; try { await q(sb.from('accidents').delete().eq('id', aid)); closeModal(); toast('Retiré du registre.'); await loadPage(); } catch (e) { fail(e); } },
+  async accDeclare(ev) {
+    const f = formData(ev); const er = $('#ad-err'); if (!f.desc.trim()) { er.textContent = 'Décris ce qui s’est passé.'; er.hidden = false; return; }
+    const kind = f.aid === 'Oui, à la clinique ou à l’hôpital' ? 'accident' : (f.injury.trim() || f.aid) ? 'premiers' : 'incident';
+    try { const r = await q(sb.from('accidents').insert({ employee_id: st.me.id, date: f.date, time: f.time, place: f.place, kind, injury: f.injury.trim(), descr: f.desc.trim(), witness: f.witness.trim(), aid: f.aid, declared_by: 'employé', status: 'à traiter' }).select('id').single()); notify('accident', r.id); toast('Déclaration envoyée. Prends soin de toi.'); await loadPage(); } catch (e) { er.textContent = errMsg(e); er.hidden = false; }
+  },
+
+  /* Clés */
+  keyForm(eid) {
+    modal('Inscrire une clé remise', `<form class="stack" onsubmit="App.keySave(event,'${eid}')"><p class="muted">Pour <b>${esc(fullname(st.data.emp))}</b></p>
+    <label>Clé ou accès<input name="descr" required list="key-opts" placeholder="Ex. Clé magasin Laval"></label><datalist id="key-opts"><option>Clé magasin Laval</option><option>Clé magasin Montréal</option><option>Clé atelier de production</option><option>Carte d’alarme Laval</option><option>Carte d’alarme Montréal</option><option>Clé du casier</option></datalist>
+    <div class="two"><label>Numéro de la clé (facultatif)<input name="number"></label><label>Remise le<input type="date" name="given" required value="${TODAY}"></label></div>
+    <div class="row"><button class="btn primary">Inscrire</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`);
+  },
+  async keySave(ev, eid) {
+    const f = formData(ev);
+    try {
+      await q(sb.from('keys_held').insert({ employee_id: eid, descr: f.descr.trim(), number: f.number.trim(), given: f.given }));
+      const step = (st.data.onbSteps || []).find(t => /clé/i.test(t.label)); if (step && st.data.empOnb) await sb.from('onb_done').upsert({ employee_id: eid, step_id: step.id, done_at: f.given });
+      closeModal(); toast('Clé inscrite au dossier.'); await loadPage();
+    } catch (e) { fail(e); }
+  },
+  async keyReturn(id) { try { await q(sb.from('keys_held').update({ returned: TODAY }).eq('id', id)); toast('Clé marquée comme rendue.'); await loadPage(); } catch (e) { fail(e); } },
+
+  /* Anniversaires */
+  recogForm(eid, yrs, date) {
+    const e = empById(eid); const msg = `Félicitations pour tes ${yrs} an${yrs > 1 ? 's' : ''} parmi nous, ${e.first_name}! Merci pour ton travail et ton engagement.`;
+    modal(`Souligner les ${yrs} an${yrs > 1 ? 's' : ''} de ${e.first_name}`, `<form class="stack" onsubmit="App.recogSave(event,'${eid}',${yrs},'${date}')"><label>Message affiché dans son espace<textarea name="msg" required>${esc(msg)}</textarea></label>
+    <div class="two"><label>Petite attention (facultatif)<input name="gift" placeholder="Ex. carte-cadeau, journée de congé"></label><label>Valeur ($, facultatif)<input type="number" step="0.01" min="0" name="value"></label></div>
+    <p class="small muted">Une attention avec une valeur est ajoutée à ses avantages. ${esc(e.first_name)} recevra un courriel.</p><div class="row"><button class="btn primary">Souligner</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`);
+  },
+  async recogSave(ev, eid, yrs, date) {
+    const f = formData(ev);
+    try {
+      const r = await q(sb.from('recognitions').insert({ employee_id: eid, years: yrs, date, msg: f.msg.trim(), gift: f.gift.trim() }).select('id').single());
+      if (f.gift.trim() || f.value) await q(sb.from('perks').insert({ employee_id: eid, date: TODAY, descr: `${f.gift.trim() || 'Attention'} — ${yrs} an${yrs > 1 ? 's' : ''} de service`, value: f.value ? Number(f.value) : null }));
+      notify('recog', r.id); closeModal(); toast('Anniversaire souligné.'); await loadPage();
+    } catch (e) { fail(e); }
+  },
+
+  /* Formation */
+  trainGo(lid) { st.trainCur = lid; render(); window.scrollTo(0, 0); },
+  async trainDone(lid) { try { await q(sb.from('training_done').insert({ employee_id: st.me.id, lesson_id: lid, done_at: TODAY })); await loadPage(); const dm = doneMap(st.me.id); const n = trainFlat(st.me).find(x => !dm[x.l.id]); st.trainCur = n ? n.l.id : lid; render(); window.scrollTo(0, 0); toast(n ? 'Section complétée.' : 'Bravo, ta formation est terminée!'); } catch (e) { fail(e); } },
+  trainModForm(id) {
+    const m = id ? trainMods().find(x => x.id === id) : { title: '', aud: 'vente' };
+    modal(id ? 'Modifier le module' : 'Nouveau module', `<form class="stack" onsubmit="App.trainModSave(event,'${id || ''}')"><div class="two"><label>Nom du module<input name="title" required value="${esc(m.title)}" placeholder="Ex. Nos départements"></label><label>Pour<select name="aud">${[['vente', 'Vente seulement'], ['prod', 'Production seulement'], ['all', 'Tout le monde']].map(([k, v]) => `<option value="${k}" ${m.aud === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div><div class="row"><button class="btn primary">Enregistrer</button>${id ? `<button type="button" class="btn ghost crit" onclick="App.trainModDel('${id}')">Supprimer le module</button>` : ''}<button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`);
+  },
+  async trainModSave(ev, id) { const f = formData(ev); try { if (id) await q(sb.from('training_modules').update({ title: f.title.trim(), aud: f.aud }).eq('id', id)); else await q(sb.from('training_modules').insert({ title: f.title.trim(), aud: f.aud, position: (trainMods().at(-1)?.position || 0) + 1 })); closeModal(); toast('Module enregistré.'); await loadPage(); } catch (e) { fail(e); } },
+  async trainModDel(id) { if (!confirm('Supprimer ce module et toutes ses sections? La progression des employés sur ce module sera effacée.')) return; try { await q(sb.from('training_modules').delete().eq('id', id)); closeModal(); toast('Module supprimé.'); await loadPage(); } catch (e) { fail(e); } },
+  async reorder(table, list, i, d) { const j = i + d; if (j < 0 || j >= list.length) return; const a = [...list];[a[i], a[j]] = [a[j], a[i]]; try { await Promise.all(a.map((x, k) => sb.from(table).update({ position: k + 1 }).eq('id', x.id))); await loadPage(); } catch (e) { fail(e); } },
+  trainModMove(i, d) { App.reorder('training_modules', trainMods(), i, d); },
+  trainLesMove(mid, i, d) { App.reorder('training_lessons', trainMods().find(m => m.id === mid).lessons, i, d); },
+  trainLesForm(mid, lid) {
+    const m = trainMods().find(x => x.id === mid); const l = lid ? m.lessons.find(x => x.id === lid) : { title: '', body: '' };
+    modal(lid ? 'Modifier la section' : 'Ajouter une section', `<form class="stack" onsubmit="App.trainLesSave(event,'${mid}','${lid || ''}')"><p class="muted" style="margin-top:-6px">Module : ${esc(m.title)}</p><label>Titre<input name="title" required value="${esc(l.title)}" placeholder="Ex. La chocolaterie"></label><label>Contenu<textarea class="big" name="body" required>${esc(l.body)}</textarea></label><p class="small muted">Commence une ligne par un tiret (-) pour une liste. Laisse une ligne vide entre deux paragraphes. Entoure un mot de **deux astérisques** pour le mettre en gras.</p><div class="row"><button class="btn primary">Enregistrer</button>${lid ? `<button type="button" class="btn ghost crit" onclick="App.trainLesDel('${lid}')">Supprimer la section</button>` : ''}<button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`, true);
+  },
+  async trainLesSave(ev, mid, lid) { const f = formData(ev); const m = trainMods().find(x => x.id === mid); try { if (lid) await q(sb.from('training_lessons').update({ title: f.title.trim(), body: f.body }).eq('id', lid)); else await q(sb.from('training_lessons').insert({ module_id: mid, title: f.title.trim(), body: f.body, position: (m.lessons.at(-1)?.position || 0) + 1 })); closeModal(); toast('Section enregistrée.'); await loadPage(); } catch (e) { fail(e); } },
+  async trainLesDel(lid) { if (!confirm('Supprimer cette section?')) return; try { await q(sb.from('training_lessons').delete().eq('id', lid)); closeModal(); await loadPage(); } catch (e) { fail(e); } },
+
+  /* Auto-évaluation */
+  evalYearTab(y) { st.evalYear = y; render(); },
+  evalLaunchForm() {
+    const cy = thisYear(); const n = (st.data.emps || []).filter(e => e.active).length; const due = new Date(); due.setDate(due.getDate() + 21);
+    modal(`Lancer l’auto-évaluation ${cy}`, `<form class="stack" onsubmit="App.evalLaunch(event)"><p>Les <b>${n} employés actifs</b> recevront leur auto-évaluation en même temps, par courriel et sur leur page d’accueil.</p><label style="max-width:240px">À remettre avant le<input type="date" name="due" required value="${iso(due)}"></label><div class="row"><button class="btn primary">Envoyer à tout le monde</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`);
+  },
+  async evalCreate(ids, due) {
+    const cy = thisYear(); const tpl = (await q(sb.from('eval_template').select('ratings,open')))[0];
+    const rows = ids.map(id => ({ employee_id: id, year: cy, due: due || null, tpl: { ratings: tpl.ratings, open: tpl.open } }));
+    const made = await q(sb.from('evals').insert(rows).select('id')); return made;
+  },
+  async evalLaunch(ev) {
+    const f = formData(ev); const cy = thisYear(); const have = new Set((st.data.evals || []).filter(v => v.year === cy).map(v => v.employee_id));
+    const ids = (st.data.emps || []).filter(e => e.active && !have.has(e.id)).map(e => e.id); if (!ids.length) return toast('Tout le monde a déjà son auto-évaluation.');
+    try { const made = await App.evalCreate(ids, f.due); if (made[0]) notify('eval_launch', made[0].id); st.evalYear = cy; closeModal(); toast(`${made.length} auto-évaluation${made.length > 1 ? 's' : ''} envoyée${made.length > 1 ? 's' : ''}.`); await loadPage(); } catch (e) { fail(e); }
+  },
+  evalAddForm() {
+    const cy = thisYear(); const list = (st.data.evals || []).filter(v => v.year === cy); const missing = (st.data.emps || []).filter(e => e.active && !list.some(v => v.employee_id === e.id)); const due = list.find(v => v.due)?.due || '';
+    modal('Ajouter un employé', `<form class="stack" onsubmit="App.evalAdd(event)"><p class="small muted">Par exemple, un employé embauché après le lancement.</p><div class="list">${missing.map(e => `<label class="item check" style="font-weight:400"><input type="checkbox" name="e_${e.id}"><span class="grow"><b>${esc(fullname(e))}</b> <span class="small muted">· ${esc(e.poste)}</span></span></label>`).join('')}</div><input type="hidden" name="due" value="${due}"><div class="row"><button class="btn primary">Envoyer</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`);
+  },
+  async evalAdd(ev) {
+    const f = formData(ev); const ids = Object.keys(f).filter(k => k.startsWith('e_')).map(k => k.slice(2)); if (!ids.length) return toast('Aucun employé choisi.');
+    try { const made = await App.evalCreate(ids, f.due); made.forEach(m => notify('eval_remind', m.id)); closeModal(); toast(`${made.length} auto-évaluation${made.length > 1 ? 's' : ''} envoyée${made.length > 1 ? 's' : ''}.`); await loadPage(); } catch (e) { fail(e); }
+  },
+  evalRemindAll(y) { const v = (st.data.evals || []).find(x => x.year === y && x.status !== 'remise'); if (!v) return; notify('eval_launch', v.id); toast('Rappel envoyé par courriel aux retardataires.'); },
+  evalRemind(id) { notify('eval_remind', id); toast('Rappel envoyé par courriel.'); },
+  evalCollect(v) { const f = $('#ev-form'); const fd2 = new FormData(f); const a = { r: {}, o: {} }; v.tpl.ratings.forEach((t, i) => { const r = fd2.get('r' + i); if (r) a.r[i] = Number(r); }); v.tpl.open.forEach((t, i) => { a.o[i] = String(fd2.get('o' + i) || ''); }); return a; },
+  async evalDraft(id) { const v = st.data.myEvals.find(x => x.id === id); try { await q(sb.rpc('eval_save', { p_id: id, p_answers: App.evalCollect(v), p_submit: false })); toast('Brouillon enregistré.'); await loadPage(); } catch (e) { fail(e); } },
+  async evalSubmit(ev, id) {
+    ev.preventDefault(); const v = st.data.myEvals.find(x => x.id === id); const a = App.evalCollect(v); const miss = v.tpl.ratings.filter((t, i) => !a.r[i]);
+    if (miss.length) { const el = $('#ev-err'); el.textContent = `Il manque une note pour : ${miss.join(', ')}.`; el.hidden = false; return; }
+    try { await q(sb.rpc('eval_save', { p_id: id, p_answers: a, p_submit: true })); notify('eval_done', id); await loadPage(); window.scrollTo(0, 0); toast('Merci! Ton auto-évaluation a été remise à la direction.'); } catch (e) { fail(e); }
+  },
+  async evalOpen(id) {
+    const admin = st.role === 'admin'; const v = [...(st.data.evals || []), ...(st.data.empEvals || []), ...(st.data.myEvals || [])].find(x => x.id === id); if (!v) return;
+    let note = '';
+    if (admin) { try { if (!v.seen) { await q(sb.from('evals').update({ seen: true }).eq('id', id)); v.seen = true; } note = (await q(sb.from('eval_notes').select('note').eq('eval_id', id)))[0]?.note || ''; } catch (e) { fail(e); } render(); }
+    const e = admin ? empById(v.employee_id) || st.data.emp : st.me;
+    modal(`Auto-évaluation · ${e ? fullname(e) : ''}`, `${evalAnswers(v)}${admin ? `<form class="stack" onsubmit="App.evalNote(event,'${id}')" style="margin-top:12px"><label>Mes notes pour la révision salariale (visibles seulement par toi)<textarea name="note">${esc(note)}</textarea></label><div class="row"><button class="btn">Enregistrer la note</button><button type="button" class="btn primary" onclick="App.close();App.openEmp('${v.employee_id}','salaire')">Voir son salaire</button></div></form>` : ''}`, true);
+  },
+  async evalNote(ev, id) { const f = formData(ev); try { await q(sb.from('eval_notes').upsert({ eval_id: id, note: f.note })); toast('Note enregistrée.'); } catch (e) { fail(e); } },
+  async evalTplForm() {
+    const t = (await q(sb.from('eval_template').select('*')))[0];
+    modal('Questions de l’auto-évaluation', `<form class="stack" onsubmit="App.evalTplSave(event)"><label>Points à noter de 1 à 5 (un par ligne)<textarea class="big" name="ratings" style="min-height:180px">${esc(t.ratings.join('\n'))}</textarea></label><label>Questions à développement (une par ligne)<textarea class="big" name="open" style="min-height:150px">${esc(t.open.join('\n'))}</textarea></label><p class="small muted">Les auto-évaluations déjà envoyées gardent leurs questions.</p><div class="row"><button class="btn primary">Enregistrer</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`, true);
+  },
+  async evalTplSave(ev) { const f = formData(ev); const L = x => x.split('\n').map(y => y.trim()).filter(Boolean); try { await q(sb.from('eval_template').update({ ratings: L(f.ratings), open: L(f.open) }).eq('id', 1)); closeModal(); toast('Questions enregistrées.'); } catch (e) { fail(e); } },
+
+  /* Liste d'accueil */
+  async onbStart(eid) { try { await q(sb.from('onb').insert({ employee_id: eid })); await loadPage(); } catch (e) { fail(e); } },
+  async onbToggle(eid, sid, done) { try { if (done) await q(sb.from('onb_done').delete().eq('employee_id', eid).eq('step_id', sid)); else await q(sb.from('onb_done').insert({ employee_id: eid, step_id: sid, done_at: TODAY })); await loadPage(); } catch (e) { fail(e); } },
+  async onbClose(eid, close) { try { await q(sb.from('onb').update({ closed: close ? TODAY : null }).eq('employee_id', eid)); toast(close ? 'Liste d’accueil fermée.' : 'Liste rouverte.'); await loadPage(); } catch (e) { fail(e); } },
+  onbRemind(eid) { notify('onb_remind', eid); toast('Rappel envoyé par courriel.'); },
+  async onbTplForm() {
+    const steps = await q(sb.from('onb_steps').select('*').order('position'));
+    modal('Étapes de la liste d’accueil', `<p class="small muted">Ces étapes sont faites par toi. Les étapes de l’employé (mot de passe, fiche, documents confidentiels, contrat, cahier) se cochent automatiquement.</p><div class="list">${steps.map(t => `<div class="item"><div class="grow"><b>${esc(t.label)}</b></div><button class="btn sm ghost" onclick="App.onbTplDel('${t.id}')">Retirer</button></div>`).join('') || '<p class="empty">Aucune étape.</p>'}</div>
+    <form class="row" onsubmit="App.onbTplAdd(event,${(steps.at(-1)?.position || 0) + 1})" style="align-items:flex-end"><label style="flex:1">Nouvelle étape<input name="label" required placeholder="Ex. Photo pour le babillard"></label><button class="btn primary">Ajouter</button></form>`);
+  },
+  async onbTplAdd(ev, pos) { const f = formData(ev); try { await q(sb.from('onb_steps').insert({ label: f.label.trim(), position: pos })); await App.onbTplForm(); await loadPage(); } catch (e) { fail(e); } },
+  async onbTplDel(id) { if (!confirm('Retirer cette étape de toutes les listes?')) return; try { await q(sb.from('onb_steps').delete().eq('id', id)); await App.onbTplForm(); await loadPage(); } catch (e) { fail(e); } },
 
   /* Courriels */
   async mailSettings(ev) { const f = formData(ev); const off = Object.keys(MAIL_KINDS).filter(k => !f['k_' + k]); try { await q(sb.from('app_settings').update({ notify_email: (f.notify_email || '').trim(), mail_off: off, updated_at: new Date().toISOString() }).eq('id', 1)); toast('Réglages enregistrés.'); await loadPage(); } catch (e) { fail(e); } },

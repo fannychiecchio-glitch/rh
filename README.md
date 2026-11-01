@@ -29,7 +29,14 @@ Plateforme RH des employés de Marius & Fanny (pâtisserie-boulangerie, Laval et
 1. **Base de données** — SQL Editor → New query : coller `supabase/04-etape3.sql`, puis Run.
 2. Rien d'autre : la page **Paye et pourboire** apparaît dans l'administration. Ces données ne sont jamais visibles par les employés.
 
+## Mise en place (étape 4)
+
+1. **Base de données** — SQL Editor → New query : coller `supabase/05-etape4.sql`, puis Run.
+2. **Fonction des avis** — Edge Functions → `notify` → Code : remplacer par la nouvelle version de `supabase/functions/notify/index.ts`, puis Deploy.
+3. **Coffre** — Employés → Coffre : créer le code du coffre (12 caractères ou plus). Ce code ne peut pas être récupéré.
+
 ## Sécurité
 
 - Le compte administrateur exige la validation en deux étapes (TOTP) : sans elle, la base refuse l'accès aux données d'administration.
 - La clé `sb_publishable_…` dans `config.js` est publique par conception. Ne jamais mettre la clé `service_role` / `secret` dans ce dépôt.
+- Coffre : le NAS, le spécimen de chèque et le permis sont chiffrés dans le navigateur de l'employé (RSA-OAEP 3072 + AES-GCM 256). La clé privée est chiffrée par le code du coffre (PBKDF2, 600 000 itérations) et n'est jamais envoyée en clair.

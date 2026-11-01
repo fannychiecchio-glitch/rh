@@ -123,6 +123,54 @@ Deno.serve(async (req) => {
         mail = { to, bcc: true, subject: `Nouvelle : ${n.title}`, lines: ["Bonjour,", `Une nouvelle a été publiée dans l’espace équipe : « ${n.title} ».`] };
         break;
       }
+      case "accident": { // employé → direction
+        const { data: a } = await db.from("accidents").select("employee_id, date, place").eq("id", id).single();
+        if (!a || a.employee_id !== myEmp) return deny();
+        const e = await emp(a.employee_id);
+        mail = { to: [adminTo], subject: `Accident déclaré par ${e.name}`, lines: ["Bonjour,", `${e.name} a déclaré un accident de travail survenu le ${fr(a.date)} (${a.place}). Complète la fiche dans le registre.`] };
+        break;
+      }
+      case "eval_launch": { // direction → tous ceux qui n'ont pas remis l'auto-évaluation de l'année (copie cachée)
+        if (!isAdmin) return deny();
+        const { data: v } = await db.from("evals").select("year").eq("id", id).single();
+        if (!v) return deny();
+        const { data: list } = await db.from("evals").select("employee_id, due").eq("year", v.year).neq("status", "remise");
+        const to: string[] = [];
+        for (const x of list ?? []) { const e = await emp(x.employee_id); if (e.active && e.to) to.push(e.to); }
+        const due = list?.find((x) => x.due)?.due;
+        mail = { to, bcc: true, subject: "Ton auto-évaluation annuelle", lines: ["Bonjour,", `La direction t’invite à remplir ton auto-évaluation annuelle${due ? ` avant le ${fr(due)}` : ""}. Elle se trouve dans ton espace, section « Auto-évaluation ».`] };
+        break;
+      }
+      case "eval_remind": {
+        if (!isAdmin) return deny();
+        const { data: v } = await db.from("evals").select("employee_id, due").eq("id", id).single();
+        if (!v) return deny();
+        const e = await emp(v.employee_id);
+        mail = { to: [e.to], subject: "Rappel : ton auto-évaluation", lines: [`Bonjour ${e.first_name},`, `Petit rappel : ton auto-évaluation est à remplir${v.due ? ` avant le ${fr(v.due)}` : ""}.`], empId: e.id };
+        break;
+      }
+      case "eval_done": { // employé → direction
+        const { data: v } = await db.from("evals").select("employee_id, status").eq("id", id).single();
+        if (!v || v.employee_id !== myEmp || v.status !== "remise") return deny();
+        const e = await emp(v.employee_id);
+        mail = { to: [adminTo], subject: `Auto-évaluation remise par ${e.name}`, lines: ["Bonjour,", `${e.name} a remis son auto-évaluation.`] };
+        break;
+      }
+      case "recog": {
+        if (!isAdmin) return deny();
+        const { data: r } = await db.from("recognitions").select("employee_id, years").eq("id", id).single();
+        if (!r) return deny();
+        const e = await emp(r.employee_id);
+        mail = { to: [e.to], subject: "Joyeux anniversaire de service!", lines: [`Bonjour ${e.first_name},`, `On souligne tes ${r.years} an${r.years > 1 ? "s" : ""} dans l’équipe. Un petit mot t’attend dans ton espace.`], empId: e.id };
+        break;
+      }
+      case "onb_remind": { // id = identifiant de l'employé
+        if (!isAdmin) return deny();
+        const e = await emp(id);
+        if (!e?.id) return deny();
+        mail = { to: [e.to], subject: "Il te reste des étapes à faire", lines: [`Bonjour ${e.first_name},`, "Pour compléter ton arrivée, il te reste quelques étapes à faire dans ton espace (fiche d’embauche, contrat, documents confidentiels ou cahier de l’employé)."], empId: e.id };
+        break;
+      }
       default: return json({ error: "Type inconnu." }, 400);
     }
 
