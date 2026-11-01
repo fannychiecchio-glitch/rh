@@ -1,9 +1,10 @@
 /* =====================================================================
-   Espace équipe Marius & Fanny — version en ligne (étapes 1 et 2)
+   Espace équipe Marius & Fanny — version en ligne (étapes 1 à 3)
    Connexion sécurisée, dossiers des employés, fiche d'embauche,
    salaire et avantages, cahier de l'employé, nouvelles,
    vacances et calendriers, avertissements, contrats signés,
-   messages et avis par courriel.
+   messages et avis par courriel, paye et pourboire,
+   banque d'heures, achats, jours de maladie payés.
    ===================================================================== */
 'use strict';
 const sb = window.supabase.createClient(MF_CONFIG.supabaseUrl, MF_CONFIG.supabaseKey, {
@@ -153,7 +154,7 @@ function subCounts() {
   if (st.role === 'admin') { const b = st.badges || {}; return { contracts: b.ctr, msgs: b.msgs }; }
   const d = st.data; return { minfo: d.myInfo === undefined ? 0 : infoDone(d.myInfo) ? 0 : 1, mcontract: (d.myCtr || []).filter(c => !c.emp_sig_at).length, mwarn: (d.myWarn || []).filter(w => !w.ack_at).length };
 }
-function adminNav() { const p = st.view.page, g = groupOf(ADMIN_GROUPS, p), b = st.badges || {}; return navItem('dash', 'Tableau de bord', p === 'dash') + navItem('emps', 'Employés', g === 'emps' || p === 'emp', b.ctr) + navItem('leaves', 'Congés', p === 'leaves', b.leaves) + navItem('msgs', 'Communication', g === 'comms', b.msgs); }
+function adminNav() { const p = st.view.page, g = groupOf(ADMIN_GROUPS, p), b = st.badges || {}; return navItem('dash', 'Tableau de bord', p === 'dash') + navItem('emps', 'Employés', g === 'emps' || p === 'emp', b.ctr) + navItem('leaves', 'Congés', p === 'leaves', b.leaves) + navItem('tips', 'Paye et pourboire', p === 'tips') + navItem('msgs', 'Communication', g === 'comms', b.msgs); }
 function empNav() {
   const p = st.view.page, c = subCounts(), d = st.data;
   const nDos = (c.minfo || 0) + (c.mcontract || 0) + (c.mwarn || 0);
@@ -218,6 +219,7 @@ async function loadPage() {
         st.data.settings = (await q(sb.from('app_settings').select('*')))[0] || {};
         st.data.mailLog = await q(sb.from('notify_log').select('*').order('at', { ascending: false }).limit(60));
       }
+      if (p === 'tips' || p === 'emp' || p === 'leaves') await loadPay();
       if (p === 'dash' || p === 'emps') {
         st.data.emps = await q(sb.from('employees').select('*').order('last_name'));
         st.data.infos = await q(sb.from('employee_info').select('employee_id,birth,street,city,postal,phone,email_perso,em_name,em_rel,em_phone'));
@@ -275,7 +277,7 @@ async function loadPage() {
 /* ---------- Pages administratrice ---------- */
 function adminPage() {
   if (st.loading) return loading();
-  switch (st.view.page) { case 'emps': return empsView(); case 'emp': return empDetail(); case 'handbook': return handbookAdmin(); case 'news': return newsAdmin(); case 'leaves': return leavesView(); case 'contracts': return contractsView(); case 'msgs': return adminMsgView(); case 'mail': return mailView(); default: return dashView(); }
+  switch (st.view.page) { case 'emps': return empsView(); case 'emp': return empDetail(); case 'handbook': return handbookAdmin(); case 'news': return newsAdmin(); case 'leaves': return leavesView(); case 'contracts': return contractsView(); case 'msgs': return adminMsgView(); case 'mail': return mailView(); case 'tips': return tipsView(); default: return dashView(); }
 }
 const curRate = id => { const r = (st.data.rates || []).find(x => x.employee_id === id); return r ? r.rate : null; };
 function dashView() {
@@ -312,11 +314,11 @@ function empDetail() {
   let body = '';
   if (tab === 'contrat') body = `<div class="spread"><p class="muted">${esc(e.first_name)} peut signer dans son espace, ou sur ton appareil quand tu lui présentes la plateforme.</p><button class="btn primary" onclick="App.contractForm('${e.id}')">Créer un contrat</button></div>${contractRows((st.data.empCtr || []).map(c => ({ c, e })), false, 'Aucun contrat pour cet employé.')}`;
   if (tab === 'warn') body = `<div class="spread"><p class="muted">${esc(e.first_name)} doit confirmer avoir pris connaissance de chaque avertissement.</p><button class="btn primary" onclick="App.warnForm('${e.id}')">Émettre un avertissement</button></div>${warnList(st.data.empWarn, true)}`;
-  if (tab === 'conges') body = `<section class="section"><h2>Vacances et autres congés</h2>${leaveList((st.data.empLeaves || []).map(l => ({ ...l, emp: e })), true)}</section>`;
+  if (tab === 'conges') body = adminSickPanel(e) + `<section class="section"><h2>Vacances et autres congés</h2>${leaveList((st.data.empLeaves || []).map(l => ({ ...l, emp: e })), true)}</section>`;
   if (tab === 'profil') body = `<div class="panel stack"><dl class="facts"><div><dt>Poste</dt><dd>${esc(e.poste) || '—'}</dd></div><div><dt>Magasin</dt><dd>${esc(e.magasin)}</dd></div><div><dt>Groupe de pourboire</dt><dd>${TIP_GROUPS[e.tip_group]}</dd></div><div><dt>Date d’embauche</dt><dd>${fd(e.start_date)}</dd></div><div><dt>Ancienneté</dt><dd>${seniority(e.start_date)}</dd></div><div><dt>Courriel de connexion</dt><dd>${esc(e.email)}</dd></div><div><dt>Statut</dt><dd>${e.active ? '<span class="pill p-ok">Actif</span>' : '<span class="pill p-mute">Inactif, ne peut plus se connecter</span>'}</dd></div></dl>
     <div class="row"><button class="btn" onclick="App.empForm('${e.id}')">Modifier le profil</button><button class="btn" onclick="App.resend('${e.id}')">Renvoyer l’invitation</button><button class="btn" onclick="App.toggleActive()">${e.active ? 'Désactiver l’accès' : 'Réactiver l’accès'}</button></div></div>`;
   if (tab === 'fiche') body = `<div class="panel">${infoForm(st.data.empInfo, 'admin')}</div>`;
-  if (tab === 'salaire') body = salaryBlock(st.data.empSal, st.data.empPerks, true);
+  if (tab === 'salaire') body = salaryBlock(st.data.empSal, st.data.empPerks, true) + empTips(e);
   if (tab === 'notes') body = `<section class="panel stack"><div class="spread"><div><h2>Bloc-notes</h2><p class="small muted">Visible seulement par toi.</p></div><span id="nt-status" class="small muted">${st.data.empNotes ? 'Enregistré le ' + fdt(st.data.empNotes.updated_at) : 'Aucune note'}</span></div><textarea class="big" id="nt-text" oninput="App.noteInput(this.value)">${esc(st.data.empNotes?.notes || '')}</textarea><p class="small muted">Les notes s’enregistrent automatiquement.</p></section>`;
   return `<div><button class="btn ghost sm" onclick="App.go('emps')">← Tous les employés</button></div>
   <div class="spread"><div><p class="eyebrow">${esc(e.poste)} · ${esc(e.magasin)}</p><h1>${esc(fullname(e))}</h1></div>${e.active ? '' : '<span class="pill p-mute">Inactif</span>'}</div>
@@ -401,6 +403,7 @@ function leavesView() {
   <section class="section"><h2>À traiter</h2>${pendingList(pl, all)}</section>
   ${props.length ? `<section class="section"><h2>En attente de la réponse de l’employé</h2><div class="list">${props.map(l => `<div class="item"><div class="grow"><b>${esc(fullname(l.emp))}</b><span class="small">Demandé : ${range(l.start_date, l.end_date)} · Proposé : <b>${range(l.prop_start, l.prop_end)}</b></span></div>${pill(l.status)}</div>`).join('')}</div></section>` : ''}
   ${campaign(all)}
+  ${sickAdminSection()}
   <section class="section">${calendar(all)}</section>`;
 }
 function campaign(all) {
@@ -549,6 +552,197 @@ function mailView() {
   <section class="panel stack"><h2>Ce que contiennent les courriels</h2><ul class="plain"><li>Les courriels disent seulement qu’il y a du nouveau et invitent à se connecter. Ils ne contiennent jamais le texte d’un avertissement, un salaire ou un renseignement confidentiel.</li><li>Ils sont envoyés à l’adresse personnelle inscrite dans la fiche d’embauche, ou à défaut au courriel de connexion.</li><li>Les invitations et les liens de mot de passe sont envoyés séparément par le système de connexion.</li></ul></section>`;
 }
 
+/* ---------- Paye et pourboire (étape 3) ---------- */
+const TG = ['laval', 'mtl', 'prod'];
+const TG_LABEL = { laval: 'Vente Laval', mtl: 'Vente Montréal', prod: 'Production', none: 'Sans pourboire' };
+const ORDER = ['laval', 'mtl', 'prod', 'none'];
+const toC = v => Math.round((Number(String(v ?? '').replace(',', '.')) || 0) * 100);
+const fromC = c => money(c / 100);
+const fmtH = h => (Math.round(h * 100) / 100).toLocaleString('fr-CA', { maximumFractionDigits: 2 });
+const roundQ = hh => Math.ceil(hh / 25 - 1e-9) * 25;
+const CART = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 3h2l2 10h9l1.8-7H6"/><circle cx="8" cy="16.5" r="1.2"/><circle cx="14.5" cy="16.5" r="1.2"/></svg>';
+const pLabel = p => p.label;
+const yearOf = p => Number(p.year) || +String(p.end || p.start).slice(0, 4);
+const empP = id => st.pay.emps[id];
+const tipGroupOf = e => e.tip_group || defTip(e.magasin);
+const capC = () => Math.round((Number(st.pay.cap) || 80) * 100);
+function rateAt(eid, date) { const h = (st.pay.rates[eid] || []).filter(s => s.effective <= date); return Number((h.length ? h[h.length - 1] : (st.pay.rates[eid] || [])[0] || { rate: 0 }).rate) || 0; }
+const rowH = r => r ? Number(r.h) || 0 : 0;
+const rowG = (r, e) => r && r.grp ? r.grp : (e ? tipGroupOf(e) : 'prod');
+
+async function loadPay() {
+  const [pp, rows, buys, adj, cat, rates, emps, set, sick] = await Promise.all([
+    q(sb.from('pay_periods').select('*').order('start_date')), q(sb.from('pay_rows').select('*')), q(sb.from('pay_buys').select('*').order('created_at')),
+    q(sb.from('bank_adj').select('*').order('date')), q(sb.from('buy_catalog').select('*')), q(sb.from('salary_history').select('employee_id,effective,rate').order('effective')),
+    q(sb.from('employees').select('id,first_name,last_name,poste,magasin,tip_group,start_date,active').order('last_name')), q(sb.from('app_settings').select('bank_cap,sick_per_year')),
+    q(sb.from('sick_days').select('*').order('start_date')),
+  ]);
+  const periods = pp.map(p => ({ id: p.id, label: p.label, year: p.year, start: p.start_date, end: p.end_date, pct: Number(p.pct), laval: p.laval ? String(p.laval) : '', mtl: p.mtl ? String(p.mtl) : '', locked: p.locked, rows: {} }));
+  const byId = Object.fromEntries(periods.map(p => [p.id, p]));
+  rows.forEach(r => { const p = byId[r.period_id]; if (p) p.rows[r.employee_id] = { h: Number(r.hours), grp: r.grp, name: r.name, buys: [] }; });
+  buys.forEach(b => { const p = byId[b.period_id]; if (!p) return; const r = p.rows[b.employee_id] = p.rows[b.employee_id] || { h: 0, grp: null, name: '', buys: [] }; r.buys.push({ id: b.id, desc: b.item, qty: b.qty, unit: b.unit, unitPrice: b.unit_price, price: b.amount }); });
+  const R = {}; rates.forEach(r => (R[r.employee_id] = R[r.employee_id] || []).push(r));
+  st.pay = { periods, adj, cat: Object.fromEntries(cat.map(c => [c.slug, c])), rates: R, emps: Object.fromEntries(emps.map(e => [e.id, e])), empList: emps, cap: Number(set[0]?.bank_cap) || 80, quota: set[0]?.sick_per_year ?? 2, sick: sick.map(s => ({ ...s, start: s.start_date, end: s.end_date, days: nDays(s.start_date, s.end_date) })) };
+}
+function tipPeriods() { return [...st.pay.periods].sort((a, b) => a.start < b.start ? 1 : -1); }
+function curTip() { const ps = tipPeriods(); let p = ps.find(x => x.id === st.tipSel); if (!p) { p = ps[0]; st.tipSel = p ? p.id : null; } return p; }
+function splitCents(total, weights) {
+  const W = weights.reduce((t, w) => t + w.w, 0); if (!W || !total) return { map: Object.fromEntries(weights.map(w => [w.id, 0])), left: W ? 0 : total };
+  const raw = weights.map(w => ({ id: w.id, ex: total * w.w / W, name: w.name })); raw.forEach(r => r.fl = Math.floor(r.ex)); let rest = total - raw.reduce((t, r) => t + r.fl, 0);
+  [...raw].sort((a, b) => (b.ex - b.fl) - (a.ex - a.fl) || a.name.localeCompare(b.name)).forEach(r => { if (rest > 0) { r.fl++; rest--; } }); return { map: Object.fromEntries(raw.map(r => [r.id, r.fl])), left: 0 };
+}
+function buyHours(eid, r, p) { if (!r || !r.buys || !r.buys.length) return 0; const rate = rateAt(eid, p.end); if (!rate) return 0; return roundQ(r.buys.reduce((t, x) => t + toC(x.price), 0) / rate); }
+// Banque d'heures : recalculée paye par paye, dans l'ordre chronologique
+function bankAll() {
+  const cap = capC(); const ps = [...st.pay.periods].sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0);
+  const bal = {}, led = {}, by = {}; const adjs = [...st.pay.adj].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const target = a => { if (a.period_id && ps.some(p => p.id === a.period_id)) return a.period_id; const p = ps.find(p => p.end >= a.date) || ps[ps.length - 1]; return p ? p.id : null; };
+  const applyAdj = (a, p) => { const v = Math.round((Number(a.hours) || 0) * 100); const before = bal[a.employee_id] || 0; bal[a.employee_id] = Math.max(0, before + v); (led[a.employee_id] = led[a.employee_id] || []).push({ type: 'adj', id: a.id, eid: a.employee_id, date: a.date, label: (a.note || 'Ajustement') + (p ? ` · appliqué à ${pLabel(p)}` : ''), delta: bal[a.employee_id] - before, bal: bal[a.employee_id] }); };
+  const pending = adjs.map(a => ({ a, t: target(a) }));
+  ps.forEach(p => {
+    pending.filter(x => x.t === p.id).forEach(x => applyAdj(x.a, p)); by[p.id] = {};
+    Object.entries(p.rows || {}).forEach(([eid, r]) => {
+      const h = Math.round(rowH(r) * 100); const bh = buyHours(eid, r, p); if (h <= 0 && !bh) return; let b = bal[eid] || 0, dep = 0, wd = 0;
+      if (h > cap) dep = h - cap; else if (h > 0 && h < cap && b > 0) wd = Math.min(b, cap - h); b = b + dep - wd; const buyBank = Math.min(b, bh); b -= buyBank; bal[eid] = b;
+      by[p.id][eid] = { h, dep, wd, tipH: h - dep + wd, bal: b, buyH: bh, buyBank, buyPay: bh - buyBank };
+      if (dep || wd || buyBank) (led[eid] = led[eid] || []).push({ type: 'paye', date: p.start, end: p.end, label: pLabel(p), h, dep, wd, buyBank, bal: b });
+    });
+  });
+  pending.filter(x => !x.t).forEach(x => applyAdj(x.a, null));
+  return { by, led, bal };
+}
+function tipCalc(p, B) {
+  B = B || bankAll(); const bk = B.by[p.id] || {}; const L = toC(p.laval), M = toC(p.mtl), pct = (Number(p.pct) || 0) / 100;
+  const pools = { laval: Math.round(L * pct), mtl: Math.round(M * pct) }; pools.prod = L + M - pools.laval - pools.mtl;
+  const rows = p.rows || {}; const hrs = { laval: 0, mtl: 0, prod: 0 }; const shares = {}; const left = {};
+  TG.forEach(g => {
+    const ws = Object.entries(rows).filter(([id, r]) => rowH(r) > 0 && rowG(r, empP(id)) === g && !(empP(id) && tipGroupOf(empP(id)) === 'none')).map(([id, r]) => ({ id, w: bk[id] ? bk[id].tipH : Math.round(rowH(r) * 100), name: r.name || '' }));
+    hrs[g] = ws.reduce((t, w) => t + w.w, 0) / 100; const sp = splitCents(pools[g], ws); left[g] = sp.left; Object.entries(sp.map).forEach(([id, c]) => { shares[id] = { total: c, grp: g }; });
+  });
+  const dist = Object.values(shares).reduce((t, x) => t + x.total, 0);
+  const worked = Object.values(rows).reduce((t, r) => t + rowH(r), 0);
+  const buy = {}; Object.entries(rows).forEach(([id, r]) => { if (!r.buys || !r.buys.length) return; const cents = r.buys.reduce((t, x) => t + toC(x.price), 0); const b = bk[id] || { buyH: 0, buyBank: 0, buyPay: 0 }; buy[id] = { c: cents, h: b.buyH, fromBank: b.buyBank, fromPay: b.buyPay, n: r.buys.length }; });
+  return { L, M, pools, hrs, shares, left, dist, total: L + M, bk, worked, buy };
+}
+function tipRowsList(p) {
+  const rows = p.rows || {}; const ids = new Set([...st.pay.empList.filter(e => e.active).map(e => e.id), ...Object.keys(rows).filter(id => rowH(rows[id]) > 0 || (rows[id].buys || []).length)]);
+  return [...ids].map(id => { const e = empP(id); const r = rows[id]; const h = rowH(r); return { id, e, name: e ? fullname(e) : ((r && r.name) || 'Ancien employé'), grp: r && h > 0 ? rowG(r, e) : (e ? (tipGroupOf(e) === 'none' ? 'none' : tipGroupOf(e)) : 'prod'), h }; })
+    .filter(x => !st.tipHide || x.h > 0).sort((a, b) => ORDER.indexOf(a.grp) - ORDER.indexOf(b.grp) || a.name.localeCompare(b.name));
+}
+function shareCell(id, c) { const sh = c.shares[id], b = c.bk[id]; if (!sh || !sh.total) return '<span class="muted">—</span>'; return fromC(sh.total) + (b && b.tipH !== b.h ? `<br><span class="small muted" style="font-weight:400">sur ${fmtH(b.tipH / 100)} h</span>` : ''); }
+const payTotal = c => Object.values(c.bk).reduce((t, b) => t + b.h - b.dep + b.wd - (b.buyPay || 0), 0) / 100;
+function payCell(id, c) {
+  const b = c.bk[id]; if (!b) return '<span class="muted">—</span>'; const pay = b.h - b.dep + b.wd - (b.buyPay || 0);
+  const parts = []; if (b.dep) parts.push(`${fmtH(b.h / 100)} − ${fmtH(b.dep / 100)} en banque`); else if (b.wd) parts.push(`${fmtH(b.h / 100)} + ${fmtH(b.wd / 100)} de la banque`); if (b.buyPay) parts.push(`− ${fmtH(b.buyPay / 100)} achat`); if (b.buyBank) parts.push('achat pris en banque');
+  return `<span class="payh">${fmtH(pay / 100)} h</span>${parts.length ? `<br><span class="small muted" style="font-weight:400">${parts.join(' · ')}</span>` : ''}`;
+}
+function bankCell(id, c) {
+  const b = c.bk[id]; if (!b) return '<span class="muted">—</span>';
+  const out = (b.wd || 0) + (b.buyBank || 0); const mv = (b.dep ? `<span class="check-ok">+${fmtH(b.dep / 100)} h</span>` : '') + (out ? `${b.dep ? ' ' : ''}<span style="color:var(--warn);font-weight:700">−${fmtH(out / 100)} h</span>${b.buyBank ? `<span class="small muted" style="display:block">dont ${fmtH(b.buyBank / 100)} h achat</span>` : ''}` : '');
+  return b.bal || mv ? `<button class="banklink" onclick="App.bankView('${id}')" title="Voir l’historique de la banque">${mv}${mv ? '<br>' : ''}<span class="small muted">Solde ${fmtH(b.bal / 100)} h</span></button>` : '<span class="muted">—</span>';
+}
+function tipsView() {
+  const ps = tipPeriods(), p = curTip();
+  const head = `<div class="spread noprint"><div><p class="eyebrow">Administration</p><h1>Paye et pourboire</h1></div><div class="row">${ps.length ? `<select aria-label="Choisir la paye" onchange="App.tipPick(this.value)" style="width:auto">${[...new Set(ps.map(yearOf))].sort((a, b) => b - a).map(y => `<optgroup label="Payes ${y}">${ps.filter(x => yearOf(x) === y).map(x => `<option value="${x.id}" ${p && x.id === p.id ? 'selected' : ''}>${esc(pLabel(x))} · ${fs(x.start)} au ${fd(x.end)}</option>`).join('')}</optgroup>`).join('')}</select>` : ''}<button class="btn primary" onclick="App.tipNewForm()">Nouvelle paye</button></div></div>`;
+  if (!p) return head + `<div class="list"><p class="empty">Aucune paye pour le moment. Clique sur « Nouvelle paye » pour commencer.</p></div>`;
+  const B = bankAll(), c = tipCalc(p, B), lk = !!p.locked, dis = lk ? 'disabled' : ''; const list = tipRowsList(p); let lastG = '';
+  if (st.tipPrint) return printSheet(p, c, list);
+  const rowsHtml = list.map(x => {
+    let g = ''; if (x.grp !== lastG) { lastG = x.grp; g = `<tr class="grp"><td colspan="5">${TG_LABEL[x.grp]}${x.grp !== 'none' ? ` <span id="gh-${x.grp}" style="font-weight:600;letter-spacing:0;text-transform:none">· ${fmtH(c.hrs[x.grp])} h de pourboire</span>` : ''}</td></tr>`; }
+    const bu = c.buy[x.id];
+    return g + `<tr><td><span class="nm">${esc(x.name)}</span> <button class="buy${bu ? ' has' : ''}" onclick="App.buyForm('${x.id}')" aria-label="Achats de ${esc(x.name)}" title="Achat de marchandise">${CART}${bu ? `<span>−${fmtH(bu.h / 100)} h</span>` : ''}</button></td><td class="r"><input type="number" inputmode="decimal" min="0" step="0.25" id="h-${x.id}" aria-label="Heures de ${esc(x.name)}" value="${x.h || ''}" placeholder="0" ${dis} oninput="App.tipH('${x.id}',this.value)"></td><td class="r" id="bk-${x.id}">${bankCell(x.id, c)}</td><td class="r" id="pay-${x.id}">${payCell(x.id, c)}</td><td class="r share" id="tp-${x.id}">${shareCell(x.id, c)}</td></tr>`;
+  }).join('');
+  return head + `
+  <section class="panel stack"><div class="spread"><div><span class="eyebrow">Période de paye</span><h2>${esc(pLabel(p))}</h2></div><div class="row"><span id="tp-save" class="small muted"></span>${lk ? '<span class="pill p-mute">Verrouillée</span>' : ''}<button class="btn sm" onclick="App.tipLock()">${lk ? 'Déverrouiller' : 'Verrouiller la paye'}</button><button class="btn sm" onclick="App.tipCopy()">Copier le tableau</button><button class="btn sm" onclick="App.tipPrintView(true)">Feuille à imprimer</button>${lk ? '' : `<button class="btn sm ghost crit" onclick="App.tipDelAsk()">Supprimer</button>`}</div></div>
+  <div class="tipin" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))"><label>Nom de la paye<input value="${esc(pLabel(p))}" ${dis} onchange="App.tipField('label',this.value)"></label><label>Année de paye<input type="number" min="2000" max="2100" value="${yearOf(p)}" ${dis} onchange="App.tipField('year',this.value)"></label><label>Du<input type="date" value="${p.start}" ${dis} onchange="App.tipField('start',this.value)"></label><label>Au<input type="date" value="${p.end}" ${dis} onchange="App.tipField('end',this.value)"></label><label>Part de la vente (%)<input type="number" min="0" max="100" step="1" id="tp-pct" value="${p.pct}" ${dis} oninput="App.tipAmt('pct',this.value)"></label></div>
+  <div class="tipin" style="grid-template-columns:1fr 1fr"><label>Pourboires reçus à Laval<div class="money"><input type="number" inputmode="decimal" min="0" step="0.01" id="tp-laval" value="${p.laval || ''}" placeholder="0,00" ${dis} oninput="App.tipAmt('laval',this.value)"><span>$</span></div></label><label>Pourboires reçus à Montréal<div class="money"><input type="number" inputmode="decimal" min="0" step="0.01" id="tp-mtl" value="${p.mtl || ''}" placeholder="0,00" ${dis} oninput="App.tipAmt('mtl',this.value)"><span>$</span></div></label></div>
+  <div class="pools">${['laval', 'mtl', 'prod'].map(g => `<div class="pool ${g === 'prod' ? 'prod' : ''}"><span>${TG_LABEL[g]} · <span id="pl-${g}-d">${g === 'prod' ? `${100 - p.pct} % de Laval + ${100 - p.pct} % de Montréal` : `${p.pct} % de ${g === 'laval' ? 'Laval' : 'Montréal'}`}</span></span><b id="pl-${g}">${fromC(c.pools[g])}</b><span id="pl-${g}-h">${fmtH(c.hrs[g])} h · ${c.hrs[g] ? money(c.pools[g] / 100 / c.hrs[g]) + ' / h' : 'aucune heure'}</span></div>`).join('')}</div></section>
+  <section class="section"><div class="spread"><h2>Heures et pourboire par employé</h2><label class="check" style="font-weight:400"><input type="checkbox" ${st.tipHide ? 'checked' : ''} onchange="App.tipHideEmpty(this.checked)"><span>Masquer les employés sans heures</span></label></div>
+  <div class="tablewrap"><table class="tips"><thead><tr><th>Employé</th><th class="r">Heures travaillées</th><th class="r">Banque</th><th class="r">Heures à payer</th><th class="r">Pourboire</th></tr></thead><tbody>${rowsHtml}</tbody>
+  <tfoot><tr><td>Total</td><td class="r" id="tt-all">${fmtH(c.worked)} h</td><td></td><td class="r" id="tt-pay">${fmtH(payTotal(c))} h</td><td class="r" id="tt-dist">${fromC(c.dist)}</td></tr></tfoot></table></div>
+  <p id="tp-check">${tipCheck(c)}</p></section>
+  <section class="section"><h2>Historique des payes</h2>${tipHistory(B)}</section>
+  <section class="panel stack"><h2>Comment le calcul fonctionne</h2><ul class="plain"><li>La vente de Laval se partage ${p.pct} % des pourboires de Laval, et la vente de Montréal ${p.pct} % des pourboires de Montréal. La production se partage les ${100 - p.pct} % restants des deux magasins.</li><li>Chaque employé reçoit une part proportionnelle à ses heures, dans le groupe de pourboire choisi dans son profil. Les employés réglés sur « Aucun pourboire » sont dans le groupe Sans pourboire.</li><li>L’icône de panier à côté du nom sert à inscrire un achat de marchandise. Le montant est converti en heures selon le taux horaire de l’employé, arrondi au quart d’heure supérieur, puis pris d’abord dans sa banque d’heures; le reste est retiré des heures à payer. Le pourboire reste calculé sur les heures travaillées.</li><li>Au-delà de ${fmtH(capC() / 100)} heures dans une paye, les heures en trop vont dans la banque, sans pourboire. Sous ${fmtH(capC() / 100)} heures, la banque complète automatiquement jusqu’à ${fmtH(capC() / 100)} heures, et ces heures reçoivent du pourboire.</li><li>Les montants sont arrondis au cent près, et le total versé égale exactement le total reçu.</li><li>Chaque changement est enregistré automatiquement. Verrouille la paye une fois entrée dans ton logiciel de paye : plus rien ne pourra la modifier.</li></ul>
+  <form class="row" onsubmit="App.bankCap(event)" style="align-items:flex-end"><label style="max-width:260px">Heures normales par paye<input type="number" min="1" max="200" step="0.5" name="cap" value="${String(capC() / 100)}"></label><button class="btn sm">Enregistrer</button></form></section>`;
+}
+function printSheet(p, c, list) {
+  const rows = list.filter(x => x.h > 0); let lastG = '';
+  return `<div class="row noprint" style="justify-content:space-between"><button class="btn" onclick="App.tipPrintView(false)">← Retour au tableau</button><button class="btn primary" onclick="window.print()">Imprimer</button></div>
+  <article class="printsheet"><div class="ph"><div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase">Marius &amp; Fanny · Paye et pourboire</div><h2>${esc(pLabel(p))}</h2></div><div style="text-align:right;font-size:12px">${fd(p.start)} au ${fd(p.end)}<br>Laval ${fromC(c.L)} · Montréal ${fromC(c.M)} · <b>Total ${fromC(c.total)}</b></div></div>
+  <table><thead><tr><th>Employé</th><th class="r">Travaillées</th><th class="r">Banque</th><th class="r">Heures à payer</th><th class="r">Pourboire</th><th class="r">Entré</th></tr></thead><tbody>
+  ${rows.map(x => { const b = c.bk[x.id] || { h: 0, dep: 0, wd: 0, bal: 0 }; const sh = c.shares[x.id]; let g = ''; if (x.grp !== lastG) { lastG = x.grp; g = `<tr class="g"><td colspan="6">${TG_LABEL[x.grp]}</td></tr>`; }
+    return g + `<tr><td>${esc(x.name)}</td><td class="r">${fmtH(x.h)} h</td><td class="r">${b.dep ? '+' + fmtH(b.dep / 100) : ''}${(b.wd || 0) + (b.buyBank || 0) ? ' −' + fmtH(((b.wd || 0) + (b.buyBank || 0)) / 100) : ''}${b.bal ? ` <span style="color:#666">(solde ${fmtH(b.bal / 100)})</span>` : ''}</td><td class="big">${fmtH((b.h - b.dep + b.wd - (b.buyPay || 0)) / 100)} h${b.buyH ? `<span style="font:400 9px var(--body);color:#555;display:block">achat ${fmtH(b.buyH / 100)} h${b.buyBank ? ` (${fmtH(b.buyBank / 100)} en banque)` : ''}</span>` : ''}</td><td class="r">${sh && sh.total ? fromC(sh.total) : '—'}</td><td class="r"><span class="box"></span></td></tr>`; }).join('')}
+  </tbody><tfoot><tr><td>Total</td><td class="r">${fmtH(c.worked)} h</td><td></td><td class="r" style="font-size:15px">${fmtH(payTotal(c))} h</td><td class="r">${fromC(c.dist)}</td><td></td></tr></tfoot></table>
+  <div class="foot"><span>Vérifié par : ____________________</span><span>Date : ______________</span></div></article>`;
+}
+function tipCheck(c) {
+  if (!c.total) return '<span class="small muted">Entre les montants de pourboire des deux magasins pour lancer le calcul.</span>';
+  const miss = TG.filter(g => c.left[g] > 0); if (miss.length) return `<span class="check-bad">${miss.map(g => `${fromC(c.left[g])} ne sont pas répartis : personne ne reçoit de pourboire en ${TG_LABEL[g]}.`).join(' ')}</span>`;
+  return c.dist === c.total ? `<span class="check-ok">✓ Total versé ${fromC(c.dist)} = total reçu ${fromC(c.total)} (Laval ${fromC(c.L)} + Montréal ${fromC(c.M)})</span>` : `<span class="check-bad">Écart : ${fromC(c.total - c.dist)}</span>`;
+}
+function tipHistory(B) {
+  const all = tipPeriods(); if (!all.length) return ''; B = B || bankAll();
+  const years = [...new Set(all.map(yearOf))].sort((a, b) => b - a); const cur = curTip(); const y = st.tipYear && years.includes(st.tipYear) ? st.tipYear : (cur ? yearOf(cur) : years[0]);
+  const ps = all.filter(p => yearOf(p) === y).sort((a, b) => a.start < b.start ? -1 : 1);
+  const tot = ps.reduce((t, p) => { const c = tipCalc(p, B); t.m += c.total; t.h += c.worked; return t; }, { m: 0, h: 0 });
+  return `<div class="tabs" role="tablist" style="margin-bottom:12px">${years.map(yy => `<button role="tab" aria-selected="${yy === y}" onclick="App.tipYearTab(${yy})">Payes ${yy}</button>`).join('')}</div>
+  <p class="small muted" style="margin-bottom:8px">${ps.length} paye${ps.length > 1 ? 's' : ''} en ${y} · ${fromC(tot.m)} de pourboires · ${fmtH(tot.h)} h travaillées</p>
+  <div class="tablewrap"><table class="resp"><thead><tr><th>Paye</th><th>Période</th><th class="r">Laval</th><th class="r">Montréal</th><th class="r">Total</th><th class="r">Heures</th><th></th></tr></thead><tbody>${ps.map(p => { const c = tipCalc(p, B);
+    return `<tr class="click" tabindex="0" onclick="App.tipPick('${p.id}')" onkeydown="if(event.key==='Enter')App.tipPick('${p.id}')"><td data-label="Paye"><b>${esc(pLabel(p))}</b></td><td data-label="Période">${fs(p.start)} au ${fd(p.end)}</td><td class="r num" data-label="Laval">${fromC(c.L)}</td><td class="r num" data-label="Montréal">${fromC(c.M)}</td><td class="r num" data-label="Total"><b>${fromC(c.total)}</b></td><td class="r num" data-label="Heures">${fmtH(c.worked)} h</td><td data-label=" ">${p.locked ? '<span class="pill p-mute">Verrouillée</span>' : ''}</td></tr>`; }).join('')}</tbody></table></div>`;
+}
+function tipsRefresh() {
+  const p = curTip(); if (!p) return; const c = tipCalc(p);
+  TG.forEach(g => { const el = $('#pl-' + g); if (el) el.textContent = fromC(c.pools[g]); const h = $('#pl-' + g + '-h'); if (h) h.textContent = `${fmtH(c.hrs[g])} h · ${c.hrs[g] ? money(c.pools[g] / 100 / c.hrs[g]) + ' / h' : 'aucune heure'}`;
+    const d = $('#pl-' + g + '-d'); if (d) d.textContent = g === 'prod' ? `${100 - p.pct} % de Laval + ${100 - p.pct} % de Montréal` : `${p.pct} % de ${g === 'laval' ? 'Laval' : 'Montréal'}`; const gh = $('#gh-' + g); if (gh) gh.textContent = '· ' + fmtH(c.hrs[g]) + ' h de pourboire'; });
+  document.querySelectorAll('td.share[id^="tp-"]').forEach(td => { const id = td.id.slice(3); td.innerHTML = shareCell(id, c); const bk = $('#bk-' + id); if (bk) bk.innerHTML = bankCell(id, c); const py = $('#pay-' + id); if (py) py.innerHTML = payCell(id, c); });
+  const tp = $('#tt-pay'); if (tp) tp.textContent = fmtH(payTotal(c)) + ' h';
+  const ta = $('#tt-all'); if (ta) ta.textContent = fmtH(c.worked) + ' h'; const dt = $('#tt-dist'); if (dt) dt.textContent = fromC(c.dist); const ck = $('#tp-check'); if (ck) ck.innerHTML = tipCheck(c);
+}
+function empTips(e) {
+  const B = bankAll(); const ps = tipPeriods().filter(p => p.rows && rowH(p.rows[e.id]) > 0);
+  const tips = ps.length ? `<section class="section"><h2>Pourboires</h2><div class="tablewrap"><table class="resp"><thead><tr><th>Paye</th><th>Période</th><th class="r">Heures travaillées</th><th class="r">Pourboire</th></tr></thead><tbody>${ps.map(p => { const c = tipCalc(p, B), h = rowH(p.rows[e.id]), sh = c.shares[e.id];
+    return `<tr><td data-label="Paye">${esc(pLabel(p))}</td><td data-label="Période">${fs(p.start)} au ${fd(p.end)}</td><td class="r num" data-label="Heures travaillées">${fmtH(h)} h</td><td class="r num" data-label="Pourboire"><b>${sh && sh.total ? fromC(sh.total) : '—'}</b></td></tr>`; }).join('')}</tbody></table></div></section>` : '';
+  return tips + bankAdmin(e, B);
+}
+function bankRows(led) {
+  return [...led].reverse().map(x => `<tr><td data-label="Date">${x.type === 'paye' ? `<b>${esc(x.label)}</b><br><span class="small muted">${fs(x.date)} au ${fd(x.end)}</span>` : `Ajustement du ${fd(x.date)}<br><span class="small muted">${esc(x.label)}</span> <button class="btn ghost sm" onclick="App.bankAdjDel('${x.id}')">Retirer</button>`}</td><td class="r num" data-label="Heures travaillées">${x.type === 'paye' ? fmtH(x.h / 100) + ' h' : '—'}</td><td class="r num" data-label="Ajoutées">${x.type === 'paye' ? (x.dep ? `<span class="check-ok">+${fmtH(x.dep / 100)} h</span>` : '—') : (x.delta > 0 ? `<span class="check-ok">+${fmtH(x.delta / 100)} h</span>` : '—')}</td><td class="r num" data-label="Utilisées">${x.type === 'paye' ? ((x.wd || x.buyBank) ? `−${fmtH(((x.wd || 0) + (x.buyBank || 0)) / 100)} h${x.buyBank ? `<br><span class="small muted">dont ${fmtH(x.buyBank / 100)} h achat</span>` : ''}` : '—') : (x.delta < 0 ? `−${fmtH(-x.delta / 100)} h` : '—')}</td><td class="r num" data-label="Solde"><b>${fmtH(x.bal / 100)} h</b></td></tr>`).join('');
+}
+function bankAdmin(e, B) {
+  const led = B.led[e.id] || [], bal = B.bal[e.id] || 0;
+  return `<section class="panel stack"><div class="spread"><div><h2>Banque d’heures</h2><p class="small muted">Heures au-delà de ${fmtH(capC() / 100)} h par paye, sans pourboire. Visible seulement par l’administration.</p></div><div class="row"><span class="big" style="font-size:1.8rem">${fmtH(bal / 100)} h</span><button class="btn sm" onclick="App.bankAdjForm('${e.id}')">Ajuster le solde</button></div></div>
+  ${led.length ? `<div class="tablewrap"><table class="resp"><thead><tr><th>Paye ou ajustement</th><th class="r">Heures travaillées</th><th class="r">Ajoutées</th><th class="r">Utilisées</th><th class="r">Solde</th></tr></thead><tbody>${bankRows(led)}</tbody></table></div>` : '<p class="small muted">Aucun mouvement dans la banque.</p>'}</section>`;
+}
+
+/* ---------- Jours de maladie payés (administration seulement) ---------- */
+const thisYear = () => new Date().getFullYear();
+const quota = () => Number(st.pay.quota) || 0;
+function eligibleFrom(e) { const d = new Date(e.start_date + 'T12:00'); d.setMonth(d.getMonth() + 3); return iso(d); }
+const sickOf = e => st.pay.sick.filter(x => x.employee_id === e.id);
+function sickYear(e, y) { return sickOf(e).filter(x => x.start.slice(0, 4) === String(y)).sort((a, b) => a.start < b.start ? -1 : 1); }
+function sickAlloc(e, y) { let left = quota(); const el = eligibleFrom(e); const m = {}; sickYear(e, y).forEach(x => { const p = x.start >= el ? Math.min(left, x.days) : 0; left -= p; m[x.id] = { paid: p, unpaid: x.days - p }; }); return m; }
+function sickStats(e, y) { y = y || thisYear(); const ys = sickYear(e, y), al = sickAlloc(e, y); const used = ys.reduce((t, x) => t + x.days, 0), paid = ys.reduce((t, x) => t + al[x.id].paid, 0); return { used, paid, left: Math.max(0, quota() - paid), unpaid: used - paid }; }
+function dayBoxes(s) { return `<div class="daybox" role="img" aria-label="${s.paid} sur ${quota()} jours utilisés">${[...Array(quota())].map((_, i) => `<i class="${i < s.paid ? 'used' : ''}"></i>`).join('')}</div>`; }
+function lastTwoPays(e) {
+  const B = bankAll(); const ps = [...st.pay.periods].sort((a, b) => a.start < b.start ? 1 : -1).filter(p => B.by[p.id] && B.by[p.id][e.id]).slice(0, 2).reverse(); if (ps.length < 2) return null;
+  return ps.map(p => { const b = B.by[p.id][e.id]; const h = Math.min(b.h - b.dep + b.wd, capC()); return Math.round(h / 100 * rateAt(e.id, p.end) * 100); });
+}
+function sickItems(e) {
+  const al = sickAlloc(e, thisYear()); const list = [...sickOf(e)].sort((a, b) => a.start < b.start ? 1 : -1);
+  if (!list.length) return `<div class="list"><p class="empty">Aucune absence maladie.</p></div>`;
+  return `<div class="list">${list.map(x => { const a = al[x.id]; return `<div class="item"><div class="grow"><b>${range(x.start, x.end)}</b><span class="muted small">${x.days} jour${x.days > 1 ? 's' : ''}${a ? (a.unpaid ? ` · <span style="color:var(--warn)">${a.unpaid} non rémunéré${a.unpaid > 1 ? 's' : ''}</span>` : ' · rémunéré') : ''}${x.note ? ` · « ${esc(x.note)} »` : ''}</span>${x.ind ? `<span class="small" style="color:var(--accent-text)">À verser : ${x.ind.paid} × ${fromC(x.ind.per)} = <b>${fromC(x.ind.total)}</b></span>` : ''}</div><div class="row"><button class="btn sm" onclick="App.sickForm('${e.id}','${x.id}')">${x.ind ? 'Indemnité' : 'Calculer l’indemnité'}</button><button class="btn sm ghost" onclick="App.sickDel('${x.id}')">Retirer</button></div></div>`; }).join('')}</div>`;
+}
+function sickHeader(e) {
+  const s = sickStats(e), el = eligibleFrom(e);
+  return `<div class="sickhead">${dayBoxes(s)}<div class="stack" style="gap:2px"><span><b class="num" style="font-size:1.2rem">${s.left}</b> jour${s.left > 1 ? 's' : ''} rémunéré${s.left > 1 ? 's' : ''} restant${s.left > 1 ? 's' : ''} sur ${quota()}</span><span class="small muted">Année ${thisYear()} · remis à zéro le 1<sup>er</sup> janvier${s.unpaid ? ` · ${s.unpaid} jour${s.unpaid > 1 ? 's' : ''} non rémunéré${s.unpaid > 1 ? 's' : ''}` : ''}</span>${el > TODAY ? `<span class="small" style="color:var(--warn)">Les jours rémunérés commencent après 3 mois de service, soit le ${fd(el)}.</span>` : ''}</div></div>`;
+}
+function adminSickPanel(e) { return `<section class="panel stack"><div class="spread"><h2>Congés maladie</h2><button class="btn" onclick="App.sickForm('${e.id}')">Inscrire une absence</button></div>${sickHeader(e)}${sickItems(e)}</section>`; }
+function sickAdminSection() {
+  const y = thisYear(), act = st.pay.empList.filter(x => x.active);
+  return `<section class="section"><div class="spread"><h2>Congés maladie ${y}</h2><form class="row" onsubmit="App.sickQuota(event)"><label class="row" style="font-weight:400">Jours rémunérés par année<input type="number" min="0" max="10" name="q" value="${quota()}" style="width:72px"></label><button class="btn sm">Enregistrer</button></form></div>
+  <div class="tablewrap"><table class="resp"><thead><tr><th>Employé</th><th class="r">Jours pris</th><th class="r">Rémunérés restants</th><th class="r">Non rémunérés</th></tr></thead><tbody>${act.map(e => { const s = sickStats(e, y); return `<tr class="click" tabindex="0" onclick="App.openEmp('${e.id}','conges')" onkeydown="if(event.key==='Enter')App.openEmp('${e.id}','conges')"><td data-label="Employé"><b>${esc(fullname(e))}</b></td><td class="r num" data-label="Jours pris">${s.used}</td><td class="r num" data-label="Rémunérés restants">${s.left === 0 ? '<span class="pill p-crit">0</span>' : s.left}</td><td class="r num" data-label="Non rémunérés">${s.unpaid || '<span class="muted">—</span>'}</td></tr>`; }).join('')}</tbody></table></div>
+  <p class="small muted">Tu inscris toi-même les absences maladie : les employés ne les voient pas. La Loi sur les normes du travail prévoit jusqu’à 10 jours d’absence par année pour maladie ou obligations familiales, dont les 2 premiers sont rémunérés après 3 mois de service continu.</p></section>`;
+}
+
 /* ---------- Pages employé ---------- */
 function empPage() {
   if (st.loading) return loading();
@@ -595,7 +789,7 @@ function accountView() {
 /* ---------- Actions ---------- */
 const App = {
   close: closeModal,
-  async go(p) { closeModal(); st.view = { page: p }; window.scrollTo(0, 0); await loadPage(); },
+  async go(p) { closeModal(); st.tipPrint = false; st.view = { page: p }; window.scrollTo(0, 0); await loadPage(); },
   async openEmp(id, tab) { st.view = { page: 'emp', id, tab: tab || 'profil' }; window.scrollTo(0, 0); await loadPage(); },
   tab(t) { st.view.tab = t; render(); },
   empQ(v) { st.empSearch = v; const pos = $('#emp-q')?.selectionStart; render(); const n = $('#emp-q'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } },
@@ -834,6 +1028,135 @@ const App = {
       notify('message_new', t.id); toast('Message envoyé à la direction.'); await loadPage();
     } catch (e) { fail(e); if (btn) btn.disabled = false; }
   },
+
+  /* Paye et pourboire */
+  tipPick(id) { st.tipSel = id; const p = curTip(); if (p) st.tipYear = yearOf(p); render(); },
+  tipYearTab(y) { st.tipYear = y; render(); },
+  tipHideEmpty(v) { st.tipHide = v; render(); },
+  tipPrintView(v) { st.tipPrint = v; render(); window.scrollTo(0, 0); },
+  tipSaving(msg) { const el = $('#tp-save'); if (el) el.textContent = msg; },
+  tipNewForm() {
+    const ps = tipPeriods(); let start, end;
+    if (ps.length) { const d = new Date(ps[0].end + 'T12:00'); d.setDate(d.getDate() + 1); start = iso(d); d.setDate(d.getDate() + 13); end = iso(d); }
+    else { const d = new Date(); d.setDate(d.getDate() - d.getDay() - 1); end = iso(d); d.setDate(d.getDate() - 13); start = iso(d); }
+    const lastNum = ps.length ? parseInt((pLabel(ps[0]).match(/\d+/) || [0])[0], 10) : 0; const ny = ps.length && lastNum >= 26; const name = `Paye ${ny ? 1 : lastNum + 1}`; const year = ps.length ? yearOf(ps[0]) + (ny ? 1 : 0) : new Date(end + 'T12:00').getFullYear();
+    modal('Nouvelle paye', `<form class="stack" onsubmit="App.tipNew(event)"><div class="two"><label>Nom de la paye<input name="label" required value="${esc(name)}" placeholder="Ex. Paye 25"></label><label>Année de paye<input type="number" name="year" required min="2000" max="2100" value="${year}"></label></div>${ny ? '<p class="small muted">La paye 26 est terminée : une nouvelle année de paye commence.</p>' : ''}<div class="two"><label>Du<input type="date" name="start" required value="${start}"></label><label>Au<input type="date" name="end" required value="${end}"></label></div><p id="np-err" class="err" hidden></p><div class="row"><button class="btn primary">Créer la paye</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`);
+  },
+  async tipNew(ev) {
+    const f = formData(ev); const er = $('#np-err'); if (f.end < f.start) { er.textContent = 'La date de fin doit suivre la date de début.'; er.hidden = false; return; }
+    const ps = tipPeriods();
+    try { const p = await q(sb.from('pay_periods').insert({ label: f.label.trim(), year: Number(f.year) || new Date(f.end + 'T12:00').getFullYear(), start_date: f.start, end_date: f.end, pct: ps.length ? ps[0].pct : 70 }).select('id,year').single()); st.tipSel = p.id; st.tipYear = p.year; closeModal(); toast(`${f.label.trim()} créée.`); await loadPage(); } catch (e) { er.textContent = errMsg(e); er.hidden = false; }
+  },
+  async tipField(k, v) {
+    const p = curTip(); if (!p || p.locked) return; const col = { label: 'label', year: 'year', start: 'start_date', end: 'end_date' }[k];
+    const val = k === 'label' ? (v.trim() || p.label) : k === 'year' ? (Number(v) || yearOf(p)) : v;
+    try { await q(sb.from('pay_periods').update({ [col]: val }).eq('id', p.id)); p[k] = val; if (k === 'year') st.tipYear = val; render(); toast('Enregistré.'); } catch (e) { fail(e); }
+  },
+  tipAmt(k, v) {
+    const p = curTip(); if (!p || p.locked) return; if (k === 'pct') p.pct = Math.max(0, Math.min(100, parseFloat(v) || 0)); else p[k] = v; tipsRefresh();
+    App.tipSaving('Enregistrement…'); clearTimeout(App._ta); App._ta = setTimeout(async () => { try { await q(sb.from('pay_periods').update({ laval: toC(p.laval) / 100, mtl: toC(p.mtl) / 100, pct: p.pct }).eq('id', p.id)); App.tipSaving('Enregistré'); } catch (e) { App.tipSaving('Erreur d’enregistrement'); fail(e); } }, 600);
+  },
+  tipH(id, v) {
+    const p = curTip(); if (!p || p.locked) return; const e = empP(id); const prev = p.rows[id]; const h = Math.max(0, parseFloat(String(v).replace(',', '.')) || 0);
+    if (!h && !(prev && prev.buys && prev.buys.length)) delete p.rows[id];
+    else p.rows[id] = { ...(prev || { buys: [] }), name: e ? fullname(e) : (prev && prev.name) || '', grp: prev && rowH(prev) > 0 ? rowG(prev, e) : (e ? tipGroupOf(e) : 'prod'), h };
+    tipsRefresh(); App.tipSaving('Enregistrement…');
+    App._th = App._th || {}; clearTimeout(App._th[id]); App._th[id] = setTimeout(async () => {
+      const r = p.rows[id];
+      try { if (r && r.h > 0) await q(sb.from('pay_rows').upsert({ period_id: p.id, employee_id: id, hours: r.h, grp: r.grp, name: r.name })); else await q(sb.from('pay_rows').delete().eq('period_id', p.id).eq('employee_id', id)); App.tipSaving('Enregistré'); }
+      catch (e) { App.tipSaving('Erreur d’enregistrement'); fail(e); }
+    }, 600);
+  },
+  buyForm(id) {
+    const p = curTip(); const e = empP(id); const r = p.rows[id] || {}; const buys = r.buys || []; const rate = rateAt(id, p.end); const lk = !!p.locked;
+    const tot = buys.reduce((t, x) => t + toC(x.price), 0); const bk = (bankAll().by[p.id] || {})[id] || { buyH: 0, buyBank: 0, buyPay: 0 };
+    const cat = Object.values(st.pay.cat).sort((a, b) => a.item.localeCompare(b.item));
+    modal(`Achats · ${e ? fullname(e) : r.name || ''}`, `<p class="muted" style="margin-top:-6px">${esc(pLabel(p))} · taux horaire ${money(rate)} / h</p>
+    ${buys.length ? `<div class="list">${buys.map(x => `<div class="item"><div class="grow"><b>${esc(x.desc)}</b><span class="muted small">${x.qty ? `${String(Number(x.qty)).replace('.', ',')} ${esc(x.unit || '')} × ${money(Number(x.unitPrice))} = ` : ''}${money(toC(x.price) / 100)}</span></div>${lk ? '' : `<button class="btn sm ghost" onclick="App.buyDel('${id}','${x.id}')">Retirer</button>`}</div>`).join('')}
+    <div class="item"><div class="grow"><b>Total ${money(tot / 100)}</b><span class="muted small">au taux horaire, arrondi au quart d’heure supérieur</span>${bk.buyBank ? `<span class="small" style="color:var(--accent-text)">${fmtH(bk.buyBank / 100)} h prise(s) dans la banque d’heures${bk.buyPay ? `, ${fmtH(bk.buyPay / 100)} h retirée(s) de la paye` : ''}</span>` : ''}</div><b class="payh" style="font-size:1.3rem">−${fmtH(bk.buyH / 100)} h</b></div></div>` : '<p class="small muted">Aucun achat pour cette paye.</p>'}
+    ${!rate ? '<p class="err">Cet employé n’a pas de taux horaire : ajoute-le dans son dossier pour convertir les achats en heures.</p>' : ''}
+    ${lk ? '<p class="small muted">Cette paye est verrouillée.</p>' : `<form class="stack" onsubmit="App.buyAdd(event,'${id}')" oninput="App.buyCalc(this,${rate})">
+      <label>Article<input name="desc" required list="by-cat" placeholder="Ex. Saumon" onchange="App.buyPick(this.form,${rate})"></label><datalist id="by-cat">${cat.map(x => `<option value="${esc(x.item)}">${money(x.unit_price)} / ${esc(x.unit)}</option>`).join('')}</datalist>
+      <div class="tipin" style="grid-template-columns:1fr 1fr 1fr"><label>Quantité<input type="number" step="0.001" min="0" name="qty" placeholder="Ex. 1,53"></label><label>Unité<select name="unit"><option>kg</option><option>g</option><option>L</option><option>unité</option><option>paquet</option></select></label><label>Prix par unité ($)<input type="number" step="0.01" min="0" name="unitPrice" placeholder="Ex. 32,50"></label></div>
+      <label>Montant total ($)<input type="number" step="0.01" min="0.01" name="price" required placeholder="Calculé automatiquement, ou entre un montant"></label>
+      <p id="by-h" class="small" style="color:var(--accent-text);min-height:1.2em"></p>
+      <div class="row"><button class="btn primary">Ajouter l’achat</button><button type="button" class="btn ghost" onclick="App.close()">Fermer</button></div></form>`}`);
+  },
+  buyPick(f, rate) { const c = st.pay.cat[slug(f.elements.desc.value)]; if (c) { f.elements.unit.value = c.unit; f.elements.unitPrice.value = c.unit_price; App.buyCalc(f, rate); } },
+  buyCalc(f, rate) {
+    const qq = parseFloat(f.elements.qty.value), u = parseFloat(f.elements.unitPrice.value); if (qq > 0 && u > 0) f.elements.price.value = (Math.round(qq * u * 100) / 100).toFixed(2);
+    const v = parseFloat(f.elements.price.value) || 0; const el = $('#by-h');
+    if (el) el.textContent = rate && v ? `${money(v)} = ${(Math.round(v * 100 / rate) / 100).toLocaleString('fr-CA')} h au taux horaire, arrondi à ${(Math.ceil(v * 100 / rate / 25 - 1e-9) * 25 / 100).toLocaleString('fr-CA')} h` : '';
+  },
+  async buyAdd(ev, id) {
+    const f = formData(ev); const p = curTip();
+    try {
+      await q(sb.from('pay_buys').insert({ period_id: p.id, employee_id: id, item: f.desc.trim(), qty: f.qty ? Number(f.qty) : null, unit: f.qty ? f.unit : '', unit_price: f.unitPrice ? Number(f.unitPrice) : null, amount: Number(f.price) }));
+      if (f.unitPrice) await q(sb.from('buy_catalog').upsert({ slug: slug(f.desc), item: f.desc.trim(), unit: f.unit, unit_price: Number(f.unitPrice) }));
+      toast('Achat ajouté.'); await loadPage(); App.buyForm(id);
+    } catch (e) { fail(e); }
+  },
+  async buyDel(id, bid) { try { await q(sb.from('pay_buys').delete().eq('id', bid)); await loadPage(); App.buyForm(id); } catch (e) { fail(e); } },
+  bankView(id) { const e = empP(id); if (!e) return; modal(`Banque d’heures · ${fullname(e)}`, bankAdmin(e, bankAll()), true); },
+  async tipLock() { const p = curTip(); try { await q(sb.from('pay_periods').update({ locked: !p.locked }).eq('id', p.id)); toast(p.locked ? 'Paye déverrouillée.' : 'Paye verrouillée. Les montants ne peuvent plus être modifiés.'); await loadPage(); } catch (e) { fail(e); } },
+  tipDelAsk() { const p = curTip(); modal(`Supprimer ${pLabel(p)}?`, `<p>Les montants, les heures et les achats de ${esc(pLabel(p))} (${fs(p.start)} au ${fd(p.end)}) seront effacés définitivement. Les banques d’heures seront recalculées.</p><div class="row"><button class="btn primary" style="background:var(--crit);border-color:var(--crit)" onclick="App.tipDel()">Supprimer</button><button class="btn ghost" onclick="App.close()">Annuler</button></div>`); },
+  async tipDel() { const p = curTip(); try { await q(sb.from('pay_periods').delete().eq('id', p.id)); st.tipSel = null; closeModal(); toast('Paye supprimée.'); await loadPage(); } catch (e) { fail(e); } },
+  tipCopy() {
+    const p = curTip(), c = tipCalc(p); const fmt = n => String(n).replace('.', ',');
+    const lines = [['Employé', 'Groupe', 'Heures travaillées', 'Heures à payer', 'Pourboire ($)', 'Banque (+/-)', 'Solde banque', 'Achats (h)'].join('\t'), ...tipRowsList(p).filter(x => x.h > 0).map(x => { const b = c.bk[x.id] || { tipH: 0, dep: 0, wd: 0, bal: 0, h: 0 }; return [x.name, TG_LABEL[x.grp], fmt(x.h), fmt((b.h - b.dep + b.wd - (b.buyPay || 0)) / 100), fmt(((c.shares[x.id] || { total: 0 }).total / 100).toFixed(2)), fmt((b.dep - b.wd - (b.buyBank || 0)) / 100), fmt(b.bal / 100), fmt((b.buyH || 0) / 100)].join('\t'); }), ['Total', '', fmt(c.worked), fmt(payTotal(c)), fmt((c.dist / 100).toFixed(2)), '', '', ''].join('\t')].join('\n');
+    try { navigator.clipboard.writeText(lines).then(() => toast('Tableau copié. Colle-le dans Excel.'), () => toast('La copie a été refusée par le navigateur.')); } catch (e) { toast('La copie a été refusée par le navigateur.'); }
+  },
+  async bankCap(ev) { const f = formData(ev); const v = Math.max(1, parseFloat(String(f.cap).replace(',', '.')) || 80); try { await q(sb.from('app_settings').update({ bank_cap: v }).eq('id', 1)); toast(`${fmtH(v)} heures normales par paye.`); await loadPage(); } catch (e) { fail(e); } },
+  bankAdjForm(eid) {
+    const e = empP(eid); const ps = tipPeriods();
+    modal('Ajuster la banque d’heures', `<form class="stack" onsubmit="App.bankAdjSave(event,'${eid}')"><p class="muted">${esc(fullname(e))} · solde actuel ${fmtH((bankAll().bal[eid] || 0) / 100)} h</p>
+    <div class="two"><label>Heures (+ pour ajouter, − pour retirer)<input type="number" step="0.25" name="hours" required placeholder="Ex. 12 ou -4"></label>${ps.length ? `<label>Appliquer à partir de<select name="payeId">${ps.map((p, i) => `<option value="${p.id}" ${i === 0 ? 'selected' : ''}>${esc(pLabel(p))} · ${fs(p.start)} au ${fd(p.end)}</option>`).join('')}</select></label>` : ''}</div>
+    <label>Raison<input name="note" required placeholder="Ex. Solde reporté de l’ancien fichier Excel"></label><p class="small muted">Les heures sont ajoutées à la banque juste avant la paye choisie : elles peuvent donc compléter les heures de cette paye.</p>
+    <div class="row"><button class="btn primary">Enregistrer</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`);
+  },
+  async bankAdjSave(ev, eid) { const f = formData(ev); try { await q(sb.from('bank_adj').insert({ employee_id: eid, period_id: f.payeId || null, date: TODAY, hours: Number(String(f.hours).replace(',', '.')) || 0, note: f.note.trim() })); closeModal(); toast('Banque ajustée.'); await loadPage(); } catch (e) { fail(e); } },
+  async bankAdjDel(id) { if (!confirm('Retirer cet ajustement?')) return; try { await q(sb.from('bank_adj').delete().eq('id', id)); closeModal(); toast('Ajustement retiré.'); await loadPage(); } catch (e) { fail(e); } },
+
+  /* Maladie */
+  sickForm(eid, sid) {
+    const e = empP(eid); const x = sid ? st.pay.sick.find(y => y.id === sid) : null; const ind = (x && x.ind) || {}; const sug = lastTwoPays(e);
+    modal(x ? 'Indemnité de maladie' : 'Inscrire une absence maladie', `<form class="stack" onsubmit="App.sickSave(event,'${eid}','${sid || ''}')" oninput="App.sickCalc(this,'${eid}','${sid || ''}')">
+    <p class="muted">Pour <b>${esc(fullname(e))}</b> · ${sickStats(e).left} jour(s) rémunéré(s) restant(s) cette année</p>
+    <div class="two"><label>Du<input type="date" name="start" required value="${x ? x.start : TODAY}" ${x ? 'disabled' : ''}></label><label>Au (inclus)<input type="date" name="end" required value="${x ? x.end : TODAY}" ${x ? 'disabled' : ''}></label></div>
+    ${x ? '' : '<label>Note (facultatif)<input name="note" placeholder="Ex. a appelé à 6 h"></label>'}
+    <div class="panel stack" style="background:var(--blue);border:0;padding:16px"><div class="spread"><h3 style="color:var(--accent-text)">Montant à verser</h3>${sug ? `<button type="button" class="btn sm" style="background:var(--cream)" onclick="App.sickFill('${eid}','${sid || ''}')">Remplir avec les 2 dernières payes</button>` : ''}</div>
+      <p class="small" style="color:var(--accent-text)">Salaire brut des 2 dernières payes complètes (4 semaines), sans les heures supplémentaires, divisé par 20.</p>
+      <div class="two"><label>Avant-dernière paye ($)<input type="number" step="0.01" min="0" name="p1" value="${ind.p1 ?? ''}" placeholder="0,00"></label><label>Dernière paye ($)<input type="number" step="0.01" min="0" name="p2" value="${ind.p2 ?? ''}" placeholder="0,00"></label></div>
+      <div id="sa-calc" class="small" style="color:#1E2A21"></div></div>
+    <p id="sa-err" class="err" hidden></p><div class="row"><button class="btn primary">${x ? 'Enregistrer' : 'Inscrire'}</button><button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`);
+    App.sickCalc($('#modal form'), eid, sid || '');
+  },
+  sickPaidDays(e, start, end, sid) {
+    const days = nDays(start, end); const el = eligibleFrom(e); if (start < el) return { days, paid: 0, reason: 'moins de 3 mois de service' };
+    const y = +start.slice(0, 4); const al = sickAlloc(e, y); let used = 0; sickYear(e, y).forEach(z => { if (z.id !== sid && z.start < start) used += al[z.id] ? al[z.id].paid : 0; });
+    const left = Math.max(0, quota() - used); return { days, paid: Math.min(days, left), left };
+  },
+  sickCalc(f, eid, sid) {
+    if (!f) return; const e = empP(eid); const x = sid ? st.pay.sick.find(y => y.id === sid) : null; const s0 = x ? x.start : f.elements.start.value, s1 = x ? x.end : f.elements.end.value; const out = $('#sa-calc'); if (!out) return;
+    if (!s0 || !s1 || s1 < s0) { out.textContent = ''; return; } const pd = App.sickPaidDays(e, s0, s1, sid); const p1 = toC(f.elements.p1.value), p2 = toC(f.elements.p2.value);
+    const per = Math.round((p1 + p2) / 20); const tot = per * pd.paid;
+    out.innerHTML = `<div class="spread" style="align-items:flex-end"><div>${pd.days} jour${pd.days > 1 ? 's' : ''} d’absence · <b>${pd.paid} jour${pd.paid > 1 ? 's' : ''} rémunéré${pd.paid > 1 ? 's' : ''}</b>${pd.reason ? ` (${pd.reason})` : pd.paid < pd.days ? ' (les autres jours ne sont pas rémunérés)' : ''}<br>${p1 + p2 ? `${fromC(p1 + p2)} ÷ 20 = <b>${fromC(per)} par jour</b>` : 'Entre le salaire des 2 dernières payes.'}</div>${p1 + p2 ? `<div style="text-align:right"><span class="small">À verser</span><br><span class="payh" style="font-size:1.8rem">${fromC(tot)}</span></div>` : ''}</div>`;
+  },
+  sickFill(eid, sid) { const sug = lastTwoPays(empP(eid)); if (!sug) return; const f = $('#modal form'); f.elements.p1.value = (sug[0] / 100).toFixed(2); f.elements.p2.value = (sug[1] / 100).toFixed(2); App.sickCalc(f, eid, sid); toast('Calculé avec les heures à payer × taux horaire. Vérifie avec ton logiciel de paye.'); },
+  async sickSave(ev, eid, sid) {
+    const f = formData(ev); const e = empP(eid); const err = m => { const el = $('#sa-err'); el.textContent = m; el.hidden = false; };
+    const p1 = toC(f.p1), p2 = toC(f.p2); const per = Math.round((p1 + p2) / 20);
+    try {
+      if (sid) { const x = st.pay.sick.find(y => y.id === sid); const pd = App.sickPaidDays(e, x.start, x.end, sid); await q(sb.from('sick_days').update({ ind: p1 + p2 ? { p1: f.p1, p2: f.p2, per, paid: pd.paid, total: per * pd.paid } : null }).eq('id', sid)); closeModal(); toast('Indemnité enregistrée.'); return loadPage(); }
+      if (f.end < f.start) return err('La date de fin doit suivre la date de début.');
+      if (sickOf(e).some(x => x.start <= f.end && x.end >= f.start)) return err('Une absence est déjà inscrite pendant ces dates.');
+      const pd = App.sickPaidDays(e, f.start, f.end, null);
+      await q(sb.from('sick_days').insert({ employee_id: eid, start_date: f.start, end_date: f.end, note: (f.note || '').trim(), ind: p1 + p2 ? { p1: f.p1, p2: f.p2, per, paid: pd.paid, total: per * pd.paid } : null }));
+      closeModal(); toast(p1 + p2 ? `Absence inscrite. À verser : ${fromC(per * pd.paid)}.` : 'Absence inscrite.'); await loadPage();
+    } catch (x) { err(errMsg(x)); }
+  },
+  async sickDel(id) { if (!confirm('Retirer cette absence?')) return; try { await q(sb.from('sick_days').delete().eq('id', id)); toast('Absence retirée.'); await loadPage(); } catch (e) { fail(e); } },
+  async sickQuota(ev) { const f = formData(ev); try { await q(sb.from('app_settings').update({ sick_per_year: Math.max(0, Math.min(10, parseInt(f.q, 10) || 0)) }).eq('id', 1)); toast('Enregistré.'); await loadPage(); } catch (e) { fail(e); } },
 
   /* Courriels */
   async mailSettings(ev) { const f = formData(ev); const off = Object.keys(MAIL_KINDS).filter(k => !f['k_' + k]); try { await q(sb.from('app_settings').update({ notify_email: (f.notify_email || '').trim(), mail_off: off, updated_at: new Date().toISOString() }).eq('id', 1)); toast('Réglages enregistrés.'); await loadPage(); } catch (e) { fail(e); } },

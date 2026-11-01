@@ -24,6 +24,11 @@ Plateforme RH des employés de Marius & Fanny (pâtisserie-boulangerie, Laval et
 3. **Secrets** (Edge Functions → Secrets) : `SMTP_HOST` (ex. `smtp.gmail.com`), `SMTP_USER` (adresse complète), `SMTP_PASS` (mot de passe d'application), `SMTP_FROM` (adresse d'envoi, facultatif). Port 465 par défaut (les ports 25 et 587 sont bloqués par Supabase).
 4. **Réglages dans la plateforme** — Employés → Contrats : renseignements de l'employeur et adresses des magasins.
 
+## Mise en place (étape 3)
+
+1. **Base de données** — SQL Editor → New query : coller `supabase/04-etape3.sql`, puis Run.
+2. Rien d'autre : la page **Paye et pourboire** apparaît dans l'administration. Ces données ne sont jamais visibles par les employés.
+
 ## Sécurité
 
 - Le compte administrateur exige la validation en deux étapes (TOTP) : sans elle, la base refuse l'accès aux données d'administration.
