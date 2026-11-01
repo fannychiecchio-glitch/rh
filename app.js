@@ -41,8 +41,8 @@ const range = (a, b) => a === b ? fd(a) : `${fs(a)} au ${fd(b)}`;
 const STATUS = { 'en attente': ['p-warn', 'En attente'], 'acceptée': ['p-ok', 'Acceptée'], 'refusée': ['p-crit', 'Refusée'], 'contre-proposition': ['p-acc', 'Autres dates proposées'], 'annulée': ['p-mute', 'Annulée'] };
 const pill = s => { const [c, t] = STATUS[s] || ['p-mute', s]; return `<span class="pill ${c}">${t}</span>`; };
 function season() { const d = new Date(); const y = d.getMonth() >= 8 ? d.getFullYear() + 1 : d.getFullYear(); return { y, a: `${y}-05-01`, b: `${y}-09-30` }; }
-const MSG_TYPES = { suggestion: 'Suggestion', demande: 'Demande spéciale', question: 'Question', autre: 'Autre' };
-const MSG_PILL = { suggestion: 'p-acc', demande: 'p-warn', question: 'p-mute', autre: 'p-mute' };
+const MSG_TYPES = { document: 'Document à transmettre', suggestion: 'Suggestion', demande: 'Demande spéciale', question: 'Question', autre: 'Autre' };
+const MSG_PILL = { document: 'p-acc', suggestion: 'p-acc', demande: 'p-warn', question: 'p-mute', autre: 'p-mute' };
 const WARN_LEVELS = ['Verbal consigné', 'Écrit', 'Final'];
 const TPL_KEYS = [['vend', 'Vente'], ['gerant', 'Vente'], ['caiss', 'Vente'], ['livr', 'Livreur'], ['plong', 'Plongeur'], ['patiss', 'Pâtissier'], ['decor', 'Pâtissier'], ['chocol', 'Chocolatier'], ['boulang', 'Boulanger'], ['cuisin', 'Cuisinier']];
 const MAIL_KINDS = {
@@ -231,6 +231,7 @@ async function loadPage() {
         const [k, o, od, os, sm, hm, hr, ev, vp] = await Promise.all([q(sb.from('keys_held').select('*').eq('employee_id', id).order('given', { ascending: false })), q(sb.from('onb').select('*').eq('employee_id', id)), q(sb.from('onb_done').select('*').eq('employee_id', id)), q(sb.from('onb_steps').select('*').order('position')),
           q(sb.from('secure_items').select('id,kind,created_at,employee_id').eq('employee_id', id)), q(sb.from('handbook_meta').select('version')), q(sb.from('handbook_reads').select('version').eq('employee_id', id)), q(sb.from('evals').select('*').eq('employee_id', id).order('year', { ascending: false })), q(sb.from('vault_pub').select('id'))]);
         Object.assign(st.data, { empKeys: k, empOnb: o[0] || null, empOnbDone: od, onbSteps: os, empSec: sm, empHbRead: hr.some(r => r.version === hm[0]?.version), empEvals: ev, vaultOn: vp.length > 0 });
+        const { data: dd } = await sb.from('employee_docs').select('*').eq('employee_id', id).order('created_at', { ascending: false }); st.data.empDocs = dd || [];
       }
       if (p === 'vault') {
         const [vk, sm, em, lg] = await Promise.all([q(sb.from('vault_key').select('id')), q(sb.from('secure_items').select('id,kind,created_at,employee_id')), allEmps(), q(sb.from('vault_log').select('*').order('at', { ascending: false }).limit(2000))]);
@@ -335,7 +336,7 @@ function seniority(d) { const m = Math.max(0, Math.floor((new Date() - new Date(
 function empDetail() {
   const e = st.data.emp; if (!e) return `<div class="list"><p class="empty">Dossier introuvable.</p></div>`;
   const tab = st.view.tab || 'profil';
-  const tabs = [['profil', 'Profil'], ['fiche', 'Fiche d’embauche'], ['contrat', 'Contrat'], ['salaire', 'Salaire et avantages'], ['warn', 'Avertissements'], ['conges', 'Congés'], ['accueil', 'Accueil'], ['secure', 'Confidentiel'], ['notes', 'Notes']];
+  const tabs = [['profil', 'Profil'], ['fiche', 'Fiche d’embauche'], ['contrat', 'Contrat'], ['salaire', 'Salaire et avantages'], ['warn', 'Avertissements'], ['conges', 'Congés'], ['accueil', 'Accueil'], ['docs', 'Documents'], ['secure', 'Confidentiel'], ['notes', 'Notes']];
   const flag = { contrat: (st.data.empCtr || []).some(c => !c.completed_at), warn: (st.data.empWarn || []).some(w => !w.ack_at), conges: (st.data.empLeaves || []).some(l => l.status === 'en attente') };
   let body = '';
   if (tab === 'contrat') body = `<div class="spread"><p class="muted">${esc(e.first_name)} peut signer dans son espace, ou sur ton appareil quand tu lui présentes la plateforme.</p><button class="btn primary" onclick="App.contractForm('${e.id}')">Créer un contrat</button></div>${contractRows((st.data.empCtr || []).map(c => ({ c, e })), false, 'Aucun contrat pour cet employé.')}`;
@@ -347,6 +348,7 @@ function empDetail() {
   if (tab === 'fiche') body = `<div class="panel">${infoForm(st.data.empInfo, 'admin')}</div>`;
   if (tab === 'salaire') body = empEvalCard() + salaryBlock(st.data.empSal, st.data.empPerks, true) + empTips(e);
   if (tab === 'accueil') body = onbTab(e);
+  if (tab === 'docs') body = docsTab(e);
   if (tab === 'secure') body = adminSecureTab(e);
   if (tab === 'notes') body = `<section class="panel stack"><div class="spread"><div><h2>Bloc-notes</h2><p class="small muted">Visible seulement par toi.</p></div><span id="nt-status" class="small muted">${st.data.empNotes ? 'Enregistré le ' + fdt(st.data.empNotes.updated_at) : 'Aucune note'}</span></div><textarea class="big" id="nt-text" oninput="App.noteInput(this.value)">${esc(st.data.empNotes?.notes || '')}</textarea><p class="small muted">Les notes s’enregistrent automatiquement.</p></section>`;
   return `<div><button class="btn ghost sm" onclick="App.go('emps')">← Tous les employés</button></div>
@@ -543,14 +545,43 @@ function initPad() {
 // Signature réduite (fond blanc, largeur 600 px) pour garder le contrat léger
 function sigImage() { const src = sigPad.c, w = Math.min(600, src.width), h = Math.round(src.height * w / src.width); const o = document.createElement('canvas'); o.width = w; o.height = h; const g = o.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(src, 0, 0, w, h); return o.toDataURL('image/png'); }
 
+/* ---------- Documents au dossier ---------- */
+const DOC_CATS = ['Contravention', 'Arrêt de travail ou billet médical', 'Certificat ou formation', 'Document signé', 'Autre'];
+const CLIP = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M14.5 9.5l-5.8 5.8a3.5 3.5 0 01-5-5l6.4-6.4a2.3 2.3 0 013.3 3.3l-6.3 6.3a1.2 1.2 0 01-1.7-1.7l5.6-5.6"/></svg>';
+const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+function shrinkImage(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onerror = rej; r.onload = () => { const img = new Image(); img.onerror = rej; img.onload = () => { const m = 2000, sc = Math.min(1, m / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height); c.toBlob(b => b ? res(b) : rej(new Error('image')), 'image/jpeg', .82); }; img.src = r.result; }; r.readAsDataURL(file); }); }
+async function uploadDocs(files, empId, meta) {
+  const out = [];
+  for (const file of files) {
+    const pdf = file.type === 'application/pdf'; if (!pdf && !/^image\//.test(file.type)) throw new Error(`« ${file.name} » : seuls les photos et les PDF sont acceptés.`);
+    let blob = file, mime = file.type, name = file.name || 'document';
+    if (!pdf) { try { blob = await shrinkImage(file); mime = 'image/jpeg'; name = name.replace(/\.[^.]+$/, '') + '.jpg'; } catch (e) { throw new Error(`« ${file.name} » : cette photo ne peut pas être lue. Essaie une photo JPG ou PNG.`); } }
+    if (blob.size > 10 * 1048576) throw new Error(`« ${file.name} » dépasse 10 Mo.`);
+    const path = `${empId}/${crypto.randomUUID()}.${pdf ? 'pdf' : 'jpg'}`;
+    const { error } = await sb.storage.from('docs').upload(path, blob, { contentType: mime, upsert: false }); if (error) throw error;
+    const row = await q(sb.from('employee_docs').insert({ employee_id: empId, path, name, mime, size: blob.size, ...meta }).select('*').single()); out.push(row);
+  }
+  return out;
+}
+const docLink = d => `<button class="btn sm" onclick="App.openDoc('${esc(d.path)}')">${CLIP} ${esc(d.name)}</button>`;
+function docsTab(e) {
+  const docs = st.data.empDocs || [];
+  return `<form class="panel stack" onsubmit="App.docUpload(event,'${e.id}')"><h2>Ajouter un document</h2>
+  <div class="two"><label>Fichier(s) — photo ou PDF, 10 Mo maximum<input type="file" name="files" multiple required accept="image/*,application/pdf"></label><label>Catégorie<select name="cat">${DOC_CATS.map(c => `<option>${c}</option>`).join('')}</select></label></div>
+  <label>Note (facultatif)<input name="note" maxlength="300" placeholder="Ex. contravention du 12 octobre, camion de livraison"></label>
+  <p id="dc-err" class="err" hidden></p><div><button class="btn primary">Ajouter au dossier</button></div>
+  <p class="small muted">Ces documents sont visibles seulement par la direction. ${esc(e.first_name)} ne les voit pas dans son espace. Pour un billet médical : la loi ne permet pas de l’exiger pour les 3 premières absences de 3 jours ou moins dans une année.</p></form>
+  <section class="section"><h2>Documents au dossier</h2>${docs.length ? `<div class="list">${docs.map(d => `<div class="item"><div class="grow"><b>${esc(d.name)}</b><span class="muted small">${esc(d.cat)} · ${fd(d.created_at)} · ${fmtSize(d.size)}${d.uploaded_by === 'employé' ? '' : ' · ajouté par la direction'}${d.note ? ` · « ${esc(d.note)} »` : ''}</span></div><div class="row"><button class="btn sm" onclick="App.openDoc('${esc(d.path)}')">Ouvrir</button><button class="btn sm ghost" onclick="App.docDel('${d.id}')">Supprimer</button></div></div>`).join('')}</div>` : '<div class="list"><p class="empty">Aucun document au dossier.</p></div>'}</section>`;
+}
+
 /* ---------- Messages ---------- */
-function bubble(m, mine) { return `<div class="bub ${mine ? 'me' : ''}"><div class="bubtxt">${esc(m.body)}</div><span class="small muted">${m.from_admin ? 'La direction' : 'Employé'} · ${fdt(m.created_at)}</span></div>`; }
-function threadView(t, msgs, role) {
+function bubble(m, mine, docs) { const att = (docs || []).filter(d => d.msg_id === m.id); return `<div class="bub ${mine ? 'me' : ''}"><div class="bubtxt">${esc(m.body)}</div>${att.length ? `<div class="row" style="gap:6px;${mine ? 'justify-content:flex-end' : ''}">${att.map(docLink).join('')}</div>` : ''}<span class="small muted">${m.from_admin ? 'La direction' : 'Employé'} · ${fdt(m.created_at)}</span></div>`; }
+function threadView(t, msgs, role, docs) {
   const who = role === 'admin' ? fullname(empById(t.employee_id)) || 'Ancien employé' : '';
   return `<div class="stack"><div><span class="pill ${MSG_PILL[t.type]}">${MSG_TYPES[t.type]}</span> ${t.status === 'fermé' ? '<span class="pill p-mute">Fermé</span>' : ''}${role === 'admin' ? `<p class="small muted" style="margin-top:6px">De ${esc(who)} · ${fdt(t.created_at)}</p>` : ''}</div>
-  <div class="thread">${msgs.map(m => bubble(m, (role === 'admin') === m.from_admin)).join('')}</div>
+  <div class="thread">${msgs.map(m => bubble(m, (role === 'admin') === m.from_admin, docs)).join('')}</div>${role === 'admin' && (docs || []).length ? '<p class="small muted">Les pièces jointes sont aussi classées dans le dossier de l’employé, onglet Documents.</p>' : ''}
   ${t.status === 'fermé' ? `<p class="small muted">Cette conversation est fermée.</p>${role === 'admin' ? `<div><button class="btn sm" onclick="App.msgClose('${t.id}',false)">Rouvrir</button></div>` : ''}` :
-    `<form class="stack" onsubmit="App.msgReply(event,'${t.id}')"><label>${role === 'admin' ? 'Ta réponse' : 'Ajouter un message'}<textarea name="text" required maxlength="5000" placeholder="${role === 'admin' ? `Écris ta réponse. ${esc(who.split(' ')[0])} recevra un courriel.` : 'Écris ton message.'}"></textarea></label><div class="row"><button class="btn primary">Envoyer</button>${role === 'admin' ? `<button type="button" class="btn ghost" onclick="App.msgClose('${t.id}',true)">Fermer la conversation</button>` : ''}</div></form>`}</div>`;
+    `<form class="stack" onsubmit="App.msgReply(event,'${t.id}')"><label>${role === 'admin' ? 'Ta réponse' : 'Ajouter un message'}<textarea name="text" required maxlength="5000" placeholder="${role === 'admin' ? `Écris ta réponse. ${esc(who.split(' ')[0])} recevra un courriel.` : 'Écris ton message.'}"></textarea></label>${role === 'admin' ? '' : '<label>Joindre une photo ou un PDF (facultatif)<input type="file" name="files" multiple accept="image/*,application/pdf"></label>'}<p id="mr-err" class="err" hidden></p><div class="row"><button class="btn primary">Envoyer</button>${role === 'admin' ? `<button type="button" class="btn ghost" onclick="App.msgClose('${t.id}',true)">Fermer la conversation</button>` : ''}</div></form>`}</div>`;
 }
 function adminMsgView() {
   const f = st.msgFilter || 'ouverts'; const all = st.data.threads || [];
@@ -565,6 +596,7 @@ function empMsgView() {
   <form class="panel stack" onsubmit="App.msgNew(event)"><h2>Nouveau message</h2>
   <div class="two"><label>Type<select name="type">${Object.entries(MSG_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label><label>Sujet<input name="subject" required maxlength="140" placeholder="Ex. Idée pour la vitrine"></label></div>
   <label>Message<textarea name="text" required maxlength="5000"></textarea></label>
+  <label>Joindre une photo ou un PDF (facultatif)<input type="file" name="files" multiple accept="image/*,application/pdf"></label><p class="small muted">Par exemple, un billet médical, une contravention ou un certificat de formation. Seule la direction pourra le voir.</p><p id="mn-err" class="err" hidden></p>
   <div><button class="btn primary">Envoyer</button></div></form>
   <section class="section"><h2>Mes conversations</h2>${ts.length ? `<div class="list">${ts.map(t => `<button class="item msgrow${t.unread_emp ? ' unread' : ''}" onclick="App.msgOpen('${t.id}')"><div class="grow"><b>${t.unread_emp ? '<span class="dot"></span>' : ''}${esc(t.subject)}</b><span class="small muted">${MSG_TYPES[t.type]}</span></div><div class="row">${t.status === 'fermé' ? '<span class="pill p-mute">Fermé</span>' : t.unread_emp ? '<span class="pill p-acc">Nouvelle réponse</span>' : ''}<span class="small muted">${fs(t.last_at)}</span></div></button>`).join('')}</div>` : '<div class="list"><p class="empty">Aucune conversation pour le moment.</p></div>'}</section>`;
 }
@@ -1022,13 +1054,13 @@ function myOnb() {
 /* ---------- Copie de sauvegarde ---------- */
 const BACKUP_TABLES = ['employees', 'profiles', 'employee_info', 'salary_history', 'perks', 'admin_notes', 'handbook_meta', 'handbook_sections', 'handbook_reads', 'news', 'news_rsvp', 'app_settings',
   'leave_requests', 'warnings', 'contract_templates', 'contracts', 'threads', 'thread_msgs', 'notify_log', 'pay_periods', 'pay_rows', 'pay_buys', 'buy_catalog', 'bank_adj', 'sick_days',
-  'vault_pub', 'vault_key', 'secure_items', 'vault_log', 'accidents', 'keys_held', 'recognitions', 'training_modules', 'training_lessons', 'training_done', 'eval_template', 'evals', 'eval_notes', 'onb_steps', 'onb', 'onb_done'];
+  'vault_pub', 'vault_key', 'secure_items', 'vault_log', 'accidents', 'keys_held', 'recognitions', 'training_modules', 'training_lessons', 'training_done', 'eval_template', 'evals', 'eval_notes', 'onb_steps', 'onb', 'onb_done', 'employee_docs'];
 function lastBackup() { try { return localStorage.getItem('mf-last-backup'); } catch (e) { return null; } }
 function backupPanel() {
   const last = lastBackup(); const days = last ? Math.floor((Date.now() - new Date(last)) / 864e5) : null; const late = days === null || days >= 30;
   return `<section class="panel stack"><div class="spread"><div><h2>Copie de sauvegarde</h2><p class="small muted">${last ? `Dernière copie téléchargée sur cet appareil le ${fdt(last)}${days >= 1 ? ` (il y a ${days} jour${days > 1 ? 's' : ''})` : ''}.` : 'Aucune copie téléchargée sur cet appareil.'}</p></div><button class="btn ${late ? 'primary' : ''}" id="bk-btn" onclick="App.backup()">Télécharger une copie</button></div>
   ${late ? '<div class="banner acc small"><div><b>Pense à faire ta copie du mois.</b> Range le fichier dans ton Google Drive, dans un dossier à part.</div></div>' : ''}
-  <p class="small muted">Le fichier contient toutes les données de la plateforme : dossiers, contrats signés, payes, pourboires, messages, etc. Les documents du coffre y restent chiffrés et illisibles sans ton code. Garde ce fichier en lieu sûr (Google Drive avec la validation en deux étapes) et ne l’envoie à personne.</p></section>`;
+  <p class="small muted">Le fichier contient toutes les données de la plateforme : dossiers, contrats signés, payes, pourboires, messages, etc. Les documents du coffre y restent chiffrés et illisibles sans ton code. Les fichiers de l’onglet Documents n’y sont pas inclus (seulement leur liste) : garde une copie des plus importants dans ton Drive. Garde ce fichier en lieu sûr (Google Drive avec la validation en deux étapes) et ne l’envoie à personne.</p></section>`;
 }
 /* ---------- Pages employé ---------- */
 function empPage() {
@@ -1295,29 +1327,48 @@ const App = {
     try {
       const admin = st.role === 'admin'; const t = (admin ? st.data.threads : st.data.myThreads).find(x => x.id === id); if (!t) return;
       const msgs = await q(sb.from('thread_msgs').select('*').eq('thread_id', id).order('created_at'));
+      const docs = (await sb.from('employee_docs').select('*').eq('thread_id', id)).data || [];
       if (admin && t.unread_admin) { await q(sb.from('threads').update({ unread_admin: false }).eq('id', id)); t.unread_admin = false; st.badges.msgs = Math.max(0, (st.badges.msgs || 1) - 1); }
       if (!admin && t.unread_emp) { await q(sb.rpc('thread_seen', { p_id: id })); t.unread_emp = false; }
-      render(); modal(t.subject, threadView(t, msgs, admin ? 'admin' : 'emp'), true);
+      render(); modal(t.subject, threadView(t, msgs, admin ? 'admin' : 'emp', docs), true);
       const th = document.querySelector('.thread'); if (th) th.scrollTop = th.scrollHeight;
     } catch (e) { fail(e); }
   },
   async msgReply(ev, id) {
-    const f = formData(ev); const btn = ev.submitter; if (btn) btn.disabled = true; const admin = st.role === 'admin';
+    const files = [...(ev.target.elements.files?.files || [])]; const f = formData(ev); const btn = ev.submitter; if (btn) btn.disabled = true; const admin = st.role === 'admin';
     try {
-      await q(sb.from('thread_msgs').insert({ thread_id: id, body: f.text.trim(), from_admin: admin }));
+      const m = await q(sb.from('thread_msgs').insert({ thread_id: id, body: f.text.trim(), from_admin: admin }).select('id').single());
+      if (files.length) { if (btn) btn.textContent = 'Envoi des fichiers…'; await uploadDocs(files, st.me.id, { uploaded_by: 'employé', cat: 'Envoyé par l’employé', thread_id: id, msg_id: m.id }); }
       if (admin) await q(sb.from('threads').update({ unread_admin: false }).eq('id', id));
       notify(admin ? 'message_reply' : 'message_new', id); toast('Message envoyé.');
       await loadPage(); App.msgOpen(id);
-    } catch (e) { fail(e); if (btn) btn.disabled = false; }
+    } catch (e) { const er = $('#mr-err'); if (er) { er.textContent = errMsg(e); er.hidden = false; } else fail(e); if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; } }
   },
   async msgClose(id, close) { try { await q(sb.from('threads').update({ status: close ? 'fermé' : 'ouvert' }).eq('id', id)); closeModal(); toast(close ? 'Conversation fermée.' : 'Conversation rouverte.'); await loadPage(); } catch (e) { fail(e); } },
   async msgNew(ev) {
-    const f = formData(ev); const btn = ev.submitter; if (btn) btn.disabled = true;
+    const files = [...(ev.target.elements.files?.files || [])]; const f = formData(ev); const btn = ev.submitter; if (btn) btn.disabled = true;
     try {
       const t = await q(sb.from('threads').insert({ employee_id: st.me.id, type: f.type, subject: f.subject.trim() }).select('id').single());
-      await q(sb.from('thread_msgs').insert({ thread_id: t.id, body: f.text.trim() }));
+      const m = await q(sb.from('thread_msgs').insert({ thread_id: t.id, body: f.text.trim() }).select('id').single());
+      if (files.length) { if (btn) btn.textContent = 'Envoi des fichiers…'; try { await uploadDocs(files, st.me.id, { uploaded_by: 'employé', cat: 'Envoyé par l’employé', thread_id: t.id, msg_id: m.id }); } catch (x) { notify('message_new', t.id); await loadPage(); return fail(new Error('Ton message est envoyé, mais un fichier n’a pas pu être joint : ' + errMsg(x))); } }
       notify('message_new', t.id); toast('Message envoyé à la direction.'); await loadPage();
-    } catch (e) { fail(e); if (btn) btn.disabled = false; }
+    } catch (e) { const er = $('#mn-err'); if (er) { er.textContent = errMsg(e); er.hidden = false; } else fail(e); if (btn) { btn.disabled = false; btn.textContent = 'Envoyer'; } }
+  },
+
+  /* Documents */
+  async openDoc(path) {
+    const w = window.open('', '_blank');
+    try { const { data, error } = await sb.storage.from('docs').createSignedUrl(path, 120); if (error) throw error; if (w) w.location = data.signedUrl; else location.href = data.signedUrl; }
+    catch (e) { if (w) w.close(); fail(e); }
+  },
+  async docUpload(ev, eid) {
+    const files = [...ev.target.elements.files.files]; const f = formData(ev); const er = $('#dc-err'); const btn = ev.submitter; if (btn) { btn.disabled = true; btn.textContent = 'Envoi…'; }
+    try { await uploadDocs(files, eid, { uploaded_by: 'admin', cat: f.cat, note: (f.note || '').trim() }); toast(files.length > 1 ? `${files.length} documents ajoutés.` : 'Document ajouté.'); await loadPage(); }
+    catch (e) { er.textContent = errMsg(e); er.hidden = false; if (btn) { btn.disabled = false; btn.textContent = 'Ajouter au dossier'; } }
+  },
+  async docDel(id) {
+    const d = (st.data.empDocs || []).find(x => x.id === id); if (!d || !confirm(`Supprimer « ${d.name} » définitivement?`)) return;
+    try { const { error } = await sb.storage.from('docs').remove([d.path]); if (error) throw error; await q(sb.from('employee_docs').delete().eq('id', id)); toast('Document supprimé.'); await loadPage(); } catch (e) { fail(e); }
   },
 
   /* Paye et pourboire */

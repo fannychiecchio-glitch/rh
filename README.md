@@ -35,6 +35,10 @@ Plateforme RH des employés de Marius & Fanny (pâtisserie-boulangerie, Laval et
 2. **Fonction des avis** — Edge Functions → `notify` → Code : remplacer par la nouvelle version de `supabase/functions/notify/index.ts`, puis Deploy.
 3. **Coffre** — Employés → Coffre : créer le code du coffre (12 caractères ou plus). Ce code ne peut pas être récupéré.
 
+## Documents au dossier
+
+1. **Base de données** — SQL Editor → New query : coller `supabase/06-documents.sql`, puis Run. Crée l'espace de stockage privé `docs` et ses règles d'accès.
+
 ## Sécurité
 
 - Le compte administrateur exige la validation en deux étapes (TOTP) : sans elle, la base refuse l'accès aux données d'administration.
