@@ -317,7 +317,8 @@ function dashView() {
   ${pl.length ? `<section class="section"><h2>Demandes de vacances à traiter</h2>${pendingList(pl.map(l => ({ ...l, emp: empOf(l.employee_id) })).filter(l => l.emp), [])}</section>` : ''}
   ${ow.length ? `<section class="section"><h2>Avertissements pas encore confirmés</h2><div class="list">${ow.map(w => { const e = empOf(w.employee_id); return e ? `<div class="item"><div class="grow"><b>${esc(fullname(e))}</b><span class="muted small">${esc(w.title)} · ${fd(w.date)}</span></div><button class="btn sm" onclick="App.openEmp('${e.id}','warn')">Voir</button></div>` : ''; }).join('')}</div></section>` : ''}
   ${emps.length ? '' : `<section class="panel stack"><h2>Bienvenue dans ton espace</h2><p>Commence par ajouter tes employés. Chacun recevra un courriel pour choisir son mot de passe.</p><div><button class="btn primary" onclick="App.go('emps');setTimeout(()=>App.empForm(),50)">Ajouter un employé</button></div></section>`}
-  ${inc.length ? `<section class="section"><h2>Fiches d’embauche incomplètes</h2><div class="list">${inc.map(e => `<div class="item"><div class="grow"><b>${esc(fullname(e))}</b><span class="muted small">${esc(e.poste)} · ${esc(e.magasin)}</span></div><button class="btn sm" onclick="App.openEmp('${e.id}')">Voir le dossier</button></div>`).join('')}</div></section>` : ''}`;
+  ${inc.length ? `<section class="section"><h2>Fiches d’embauche incomplètes</h2><div class="list">${inc.map(e => `<div class="item"><div class="grow"><b>${esc(fullname(e))}</b><span class="muted small">${esc(e.poste)} · ${esc(e.magasin)}</span></div><button class="btn sm" onclick="App.openEmp('${e.id}')">Voir le dossier</button></div>`).join('')}</div></section>` : ''}
+  ${backupPanel()}`;
 }
 function empsView() {
   const qy = slug(st.empSearch || ''); const infos = st.data.infos || [];
@@ -1018,6 +1019,17 @@ function myOnb() {
   return `<section class="panel stack"><div class="spread"><h2>Mes premières étapes</h2><span class="small muted num">${it.length - left.length} sur ${it.length} faites</span></div><div class="checklist">${it.map(x => `<div class="ck${x.done ? ' done' : ''}"><span class="box" aria-hidden="true">${x.done ? '✓' : ''}</span><div class="grow"><span class="lbl">${esc(x.label)}</span></div>${x.done ? '' : `<button class="btn sm" onclick="App.go('${x.page}')">Faire</button>`}</div>`).join('')}</div></section>`;
 }
 
+/* ---------- Copie de sauvegarde ---------- */
+const BACKUP_TABLES = ['employees', 'profiles', 'employee_info', 'salary_history', 'perks', 'admin_notes', 'handbook_meta', 'handbook_sections', 'handbook_reads', 'news', 'news_rsvp', 'app_settings',
+  'leave_requests', 'warnings', 'contract_templates', 'contracts', 'threads', 'thread_msgs', 'notify_log', 'pay_periods', 'pay_rows', 'pay_buys', 'buy_catalog', 'bank_adj', 'sick_days',
+  'vault_pub', 'vault_key', 'secure_items', 'vault_log', 'accidents', 'keys_held', 'recognitions', 'training_modules', 'training_lessons', 'training_done', 'eval_template', 'evals', 'eval_notes', 'onb_steps', 'onb', 'onb_done'];
+function lastBackup() { try { return localStorage.getItem('mf-last-backup'); } catch (e) { return null; } }
+function backupPanel() {
+  const last = lastBackup(); const days = last ? Math.floor((Date.now() - new Date(last)) / 864e5) : null; const late = days === null || days >= 30;
+  return `<section class="panel stack"><div class="spread"><div><h2>Copie de sauvegarde</h2><p class="small muted">${last ? `Dernière copie téléchargée sur cet appareil le ${fdt(last)}${days >= 1 ? ` (il y a ${days} jour${days > 1 ? 's' : ''})` : ''}.` : 'Aucune copie téléchargée sur cet appareil.'}</p></div><button class="btn ${late ? 'primary' : ''}" id="bk-btn" onclick="App.backup()">Télécharger une copie</button></div>
+  ${late ? '<div class="banner acc small"><div><b>Pense à faire ta copie du mois.</b> Range le fichier dans ton Google Drive, dans un dossier à part.</div></div>' : ''}
+  <p class="small muted">Le fichier contient toutes les données de la plateforme : dossiers, contrats signés, payes, pourboires, messages, etc. Les documents du coffre y restent chiffrés et illisibles sans ton code. Garde ce fichier en lieu sûr (Google Drive avec la validation en deux étapes) et ne l’envoie à personne.</p></section>`;
+}
 /* ---------- Pages employé ---------- */
 function empPage() {
   if (st.loading) return loading();
@@ -1645,6 +1657,25 @@ const App = {
   },
   async onbTplAdd(ev, pos) { const f = formData(ev); try { await q(sb.from('onb_steps').insert({ label: f.label.trim(), position: pos })); await App.onbTplForm(); await loadPage(); } catch (e) { fail(e); } },
   async onbTplDel(id) { if (!confirm('Retirer cette étape de toutes les listes?')) return; try { await q(sb.from('onb_steps').delete().eq('id', id)); await App.onbTplForm(); await loadPage(); } catch (e) { fail(e); } },
+
+  async backup() {
+    const btn = $('#bk-btn'); const lbl = btn ? btn.textContent : ''; const out = { app: 'Espace équipe Marius & Fanny', format: 1, created_at: new Date().toISOString(), tables: {}, skipped: [] };
+    try {
+      let i = 0;
+      for (const t of BACKUP_TABLES) {
+        i++; if (btn) { btn.disabled = true; btn.textContent = `Préparation… ${Math.round(i / BACKUP_TABLES.length * 100)} %`; }
+        const rows = []; let from = 0; let ok = true;
+        while (true) { const { data, error } = await sb.from(t).select('*').range(from, from + 999); if (error) { ok = false; break; } rows.push(...data); if (data.length < 1000) break; from += 1000; }
+        if (ok) out.tables[t] = rows; else out.skipped.push(t);
+      }
+      const blob = new Blob([JSON.stringify(out)], { type: 'application/json' }); const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = `sauvegarde-espace-equipe-${TODAY}.json`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+      try { localStorage.setItem('mf-last-backup', new Date().toISOString()); } catch (e) {}
+      logVault('Copie de sauvegarde téléchargée');
+      const n = Object.values(out.tables).reduce((t, r) => t + r.length, 0);
+      toast(`Copie téléchargée (${n} éléments). Range-la dans ton Google Drive.`); render();
+    } catch (e) { fail(e); if (btn) { btn.disabled = false; btn.textContent = lbl; } }
+  },
 
   /* Courriels */
   async mailSettings(ev) { const f = formData(ev); const off = Object.keys(MAIL_KINDS).filter(k => !f['k_' + k]); try { await q(sb.from('app_settings').update({ notify_email: (f.notify_email || '').trim(), mail_off: off, updated_at: new Date().toISOString() }).eq('id', 1)); toast('Réglages enregistrés.'); await loadPage(); } catch (e) { fail(e); } },
