@@ -49,6 +49,7 @@ Deno.serve(async (req) => {
       if (adm) { const { data: u } = await db.auth.admin.getUserById(adm.id); adminTo = u?.user?.email ?? ""; }
     }
 
+    const adminList = adminTo.split(/[,;]/).map((x) => x.trim()).filter(Boolean);
     const emp = async (empId: string) => {
       const { data: e } = await db.from("employees").select("id, first_name, last_name, email, active").eq("id", empId).single();
       const { data: i } = await db.from("employee_info").select("email_perso").eq("employee_id", empId).maybeSingle();
@@ -62,7 +63,7 @@ Deno.serve(async (req) => {
         const { data: l } = await db.from("leave_requests").select("employee_id, type, start_date, end_date").eq("id", id).single();
         if (!l || l.employee_id !== myEmp) return deny();
         const e = await emp(l.employee_id);
-        mail = { to: [adminTo], subject: `Demande de vacances de ${e.name}`, lines: [`Bonjour,`, `${e.name} a fait une demande (${String(l.type).toLowerCase()}) du ${fr(l.start_date)} au ${fr(l.end_date)}.`] };
+        mail = { to: adminList, subject: `Demande de vacances de ${e.name}`, lines: [`Bonjour,`, `${e.name} a fait une demande (${String(l.type).toLowerCase()}) du ${fr(l.start_date)} au ${fr(l.end_date)}.`] };
         break;
       }
       case "leave_answer": { // direction → employé
@@ -95,14 +96,14 @@ Deno.serve(async (req) => {
         const { data: c } = await db.from("contracts").select("employee_id, title, admin_sig_at, emp_sig_at").eq("id", id).single();
         if (!c || c.employee_id !== myEmp || !c.emp_sig_at) return deny();
         const e = await emp(c.employee_id);
-        mail = { to: [adminTo], subject: `${e.name} a signé son contrat`, lines: ["Bonjour,", `${e.name} a signé son contrat (${c.title}).${c.admin_sig_at ? " Le contrat est maintenant signé par les deux parties." : " Il reste ta signature."}`] };
+        mail = { to: adminList, subject: `${e.name} a signé son contrat`, lines: ["Bonjour,", `${e.name} a signé son contrat (${c.title}).${c.admin_sig_at ? " Le contrat est maintenant signé par les deux parties." : " Il reste ta signature."}`] };
         break;
       }
       case "message_new": { // employé → direction (nouvelle conversation ou nouveau message)
         const { data: t } = await db.from("threads").select("employee_id, subject").eq("id", id).single();
         if (!t || t.employee_id !== myEmp) return deny();
         const e = await emp(t.employee_id);
-        mail = { to: [adminTo], subject: `Nouveau message de ${e.name}`, lines: ["Bonjour,", `${e.name} t’a écrit au sujet de « ${t.subject} ».`] };
+        mail = { to: adminList, subject: `Nouveau message de ${e.name}`, lines: ["Bonjour,", `${e.name} t’a écrit au sujet de « ${t.subject} ».`] };
         break;
       }
       case "message_reply": { // direction → employé
@@ -127,7 +128,7 @@ Deno.serve(async (req) => {
         const { data: a } = await db.from("accidents").select("employee_id, date, place").eq("id", id).single();
         if (!a || a.employee_id !== myEmp) return deny();
         const e = await emp(a.employee_id);
-        mail = { to: [adminTo], subject: `Accident déclaré par ${e.name}`, lines: ["Bonjour,", `${e.name} a déclaré un accident de travail survenu le ${fr(a.date)} (${a.place}). Complète la fiche dans le registre.`] };
+        mail = { to: adminList, subject: `Accident déclaré par ${e.name}`, lines: ["Bonjour,", `${e.name} a déclaré un accident de travail survenu le ${fr(a.date)} (${a.place}). Complète la fiche dans le registre.`] };
         break;
       }
       case "eval_launch": { // direction → tous ceux qui n'ont pas remis l'auto-évaluation de l'année (copie cachée)
@@ -153,7 +154,7 @@ Deno.serve(async (req) => {
         const { data: v } = await db.from("evals").select("employee_id, status").eq("id", id).single();
         if (!v || v.employee_id !== myEmp || v.status !== "remise") return deny();
         const e = await emp(v.employee_id);
-        mail = { to: [adminTo], subject: `Auto-évaluation remise par ${e.name}`, lines: ["Bonjour,", `${e.name} a remis son auto-évaluation.`] };
+        mail = { to: adminList, subject: `Auto-évaluation remise par ${e.name}`, lines: ["Bonjour,", `${e.name} a remis son auto-évaluation.`] };
         break;
       }
       case "recog": {
