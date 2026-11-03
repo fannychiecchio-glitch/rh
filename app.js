@@ -706,9 +706,10 @@ function tipRowsList(p) {
 function shareCell(id, c) { const sh = c.shares[id], b = c.bk[id]; if (!sh || !sh.total) return '<span class="muted">—</span>'; return fromC(sh.total) + (b && b.tipH !== b.h ? `<br><span class="small muted" style="font-weight:400">sur ${fmtH(b.tipH / 100)} h</span>` : ''); }
 const payTotal = c => Object.values(c.bk).reduce((t, b) => t + b.h - b.dep + b.wd - (b.buyPay || 0), 0) / 100;
 function payCell(id, c) {
-  const b = c.bk[id]; if (!b) return '<span class="muted">—</span>'; const pay = b.h - b.dep + b.wd - (b.buyPay || 0);
+  const p = curTip(); const sk = p ? sickTag(p, id) : '';
+  const b = c.bk[id]; if (!b) return sk || '<span class="muted">—</span>'; const pay = b.h - b.dep + b.wd - (b.buyPay || 0);
   const parts = []; if (b.dep) parts.push(`${fmtH(b.h / 100)} − ${fmtH(b.dep / 100)} en banque`); else if (b.wd) parts.push(`${fmtH(b.h / 100)} + ${fmtH(b.wd / 100)} de la banque`); if (b.buyPay) parts.push(`− ${fmtH(b.buyPay / 100)} achat`); if (b.buyBank) parts.push('achat pris en banque');
-  return `<span class="payh">${fmtH(pay / 100)} h</span>${parts.length ? `<br><span class="small muted" style="font-weight:400">${parts.join(' · ')}</span>` : ''}`;
+  return `<span class="payh">${fmtH(pay / 100)} h</span>${parts.length ? `<br><span class="small muted" style="font-weight:400">${parts.join(' · ')}</span>` : ''}${sk}`;
 }
 function bankCell(id, c) {
   const b = c.bk[id]; if (!b) return '<span class="muted">—</span>';
@@ -719,7 +720,12 @@ function bankCell(id, c) {
 function sickNotes(p, eid) {
   return st.pay.sick.filter(x => x.employee_id === eid && x.start <= p.end && x.end >= p.start).map(x => x.ind ? `Maladie payée ${range(x.start, x.end)} : ${x.ind.paid} j × ${fromC(x.ind.per)} = <b>${fromC(x.ind.total)}</b>` : `Absence maladie ${range(x.start, x.end)} · indemnité à calculer`);
 }
-const sickNoteHtml = (p, eid) => sickNotes(p, eid).map(t => `<span class="small" style="display:block;color:var(--accent-text);font-weight:600">${t}</span>`).join('');
+function sickShort(p, eid) {
+  const l = st.pay.sick.filter(x => x.employee_id === eid && x.start <= p.end && x.end >= p.start); if (!l.length) return '';
+  const tot = l.reduce((t, x) => t + (x.ind ? x.ind.total : 0), 0); const todo = l.some(x => !x.ind);
+  return tot ? `Maladie = ${fromC(tot)}${todo ? ' + à calculer' : ''}` : 'Maladie à calculer';
+}
+const sickTag = (p, eid) => { const t = sickShort(p, eid); return t ? `<span class="small" style="display:block;color:var(--accent-text);font-weight:700">${t}</span>` : ''; };
 const ferAmt = (id, p, b) => Math.round(b.ferH / 100 * rateAt(id, p.end) * 100);
 const ferTotal = (c, p) => Object.entries(c.bk).reduce((t, [id, b]) => ({ h: t.h + (b.ferH || 0), m: t.m + (b.ferH ? ferAmt(id, p, b) : 0) }), { h: 0, m: 0 });
 function ferCell(id, c, p) {
@@ -746,7 +752,7 @@ function tipsView() {
   const rowsHtml = list.map(x => {
     let g = ''; if (x.grp !== lastG) { lastG = x.grp; g = `<tr class="grp"><td colspan="${nh ? 6 : 5}">${TG_LABEL[x.grp]}${x.grp !== 'none' ? ` <span id="gh-${x.grp}" style="font-weight:600;letter-spacing:0;text-transform:none">· ${fmtH(c.hrs[x.grp])} h de pourboire</span>` : ''}</td></tr>`; }
     const bu = c.buy[x.id];
-    return g + `<tr><td><span class="nm">${esc(x.name)}</span> <button class="buy${bu ? ' has' : ''}" onclick="App.buyForm('${x.id}')" aria-label="Achats de ${esc(x.name)}" title="Achat de marchandise">${CART}${bu ? `<span>−${fmtH(bu.h / 100)} h</span>` : ''}</button>${sickNoteHtml(p, x.id)}</td><td class="r"><input type="number" inputmode="decimal" min="0" step="0.25" id="h-${x.id}" aria-label="Heures de ${esc(x.name)}" value="${x.h || ''}" placeholder="0" ${dis} oninput="App.tipH('${x.id}',this.value)"></td><td class="r" id="bk-${x.id}">${bankCell(x.id, c)}</td><td class="r" id="pay-${x.id}">${payCell(x.id, c)}</td>${nh ? `<td class="r" id="fe-${x.id}">${ferCell(x.id, c, p)}</td>` : ''}<td class="r share" id="tp-${x.id}">${shareCell(x.id, c)}</td></tr>`;
+    return g + `<tr><td><span class="nm">${esc(x.name)}</span> <button class="buy${bu ? ' has' : ''}" onclick="App.buyForm('${x.id}')" aria-label="Achats de ${esc(x.name)}" title="Achat de marchandise">${CART}${bu ? `<span>−${fmtH(bu.h / 100)} h</span>` : ''}</button></td><td class="r"><input type="number" inputmode="decimal" min="0" step="0.25" id="h-${x.id}" aria-label="Heures de ${esc(x.name)}" value="${x.h || ''}" placeholder="0" ${dis} oninput="App.tipH('${x.id}',this.value)"></td><td class="r" id="bk-${x.id}">${bankCell(x.id, c)}</td><td class="r" id="pay-${x.id}">${payCell(x.id, c)}</td>${nh ? `<td class="r" id="fe-${x.id}">${ferCell(x.id, c, p)}</td>` : ''}<td class="r share" id="tp-${x.id}">${shareCell(x.id, c)}</td></tr>`;
   }).join('');
   return head + `
   <section class="panel stack"><div class="spread"><div><span class="eyebrow">Période de paye</span><h2>${esc(pLabel(p))}</h2></div><div class="row"><span id="tp-save" class="small muted"></span>${lk ? '<span class="pill p-mute">Verrouillée</span>' : ''}<button class="btn sm" onclick="App.tipLock()">${lk ? 'Déverrouiller' : 'Verrouiller la paye'}</button><button class="btn sm" onclick="App.tipCopy()">Copier le tableau</button><button class="btn sm" onclick="App.tipPrintView(true)">Feuille à imprimer</button>${lk ? '' : `<button class="btn sm ghost crit" onclick="App.tipDelAsk()">Supprimer</button>`}</div></div>
@@ -770,8 +776,8 @@ function printSheet(p, c, list) {
   <article class="printsheet"><div class="ph"><div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase">Marius &amp; Fanny · Paye et pourboire</div><h2>${esc(pLabel(p))}</h2></div><div style="text-align:right;font-size:12px">${fd(p.start)} au ${fd(p.end)}<br>Laval ${fromC(c.L)} · Montréal ${fromC(c.M)} · <b>Total ${fromC(c.total)}</b>${nh ? `<br>Férié : ${hs.map(h => `${esc(h.name)} (${fs(h.date)})`).join(', ')}` : ''}</div></div>
   <table><thead><tr><th>Employé</th><th class="r">Travaillées</th><th class="r">Banque</th><th class="r">Heures à payer</th>${nh ? '<th class="r">Férié</th>' : ''}<th class="r">Pourboire</th><th class="r">Entré</th></tr></thead><tbody>
   ${rows.map(x => { const b = c.bk[x.id] || { h: 0, dep: 0, wd: 0, bal: 0 }; const sh = c.shares[x.id]; let g = ''; if (x.grp !== lastG) { lastG = x.grp; g = `<tr class="g"><td colspan="${nh ? 7 : 6}">${TG_LABEL[x.grp]}</td></tr>`; }
-    const sn = sickNotes(p, x.id);
-    return g + `<tr><td>${esc(x.name)}${sn.map(t => `<span style="font:400 9px var(--body);color:#333;display:block">${t}</span>`).join('')}</td><td class="r">${fmtH(x.h)} h</td><td class="r">${b.dep ? '+' + fmtH(b.dep / 100) : ''}${(b.wd || 0) + (b.buyBank || 0) ? ' −' + fmtH(((b.wd || 0) + (b.buyBank || 0)) / 100) : ''}${b.bal ? ` <span style="color:#666">(solde ${fmtH(b.bal / 100)})</span>` : ''}</td><td class="big">${fmtH((b.h - b.dep + b.wd - (b.buyPay || 0)) / 100)} h${b.buyH ? `<span style="font:400 9px var(--body);color:#555;display:block">achat ${fmtH(b.buyH / 100)} h${b.buyBank ? ` (${fmtH(b.buyBank / 100)} en banque)` : ''}</span>` : ''}</td>${nh ? `<td class="r">${b.ferH ? `${fmtH(b.ferH / 100)} h<span style="font:400 9px var(--body);color:#555;display:block">${fromC(ferAmt(x.id, p, b))}</span>` : '—'}</td>` : ''}<td class="r">${sh && sh.total ? fromC(sh.total) : '—'}</td><td class="r"><span class="box"></span></td></tr>`; }).join('')}
+    const sn = sickShort(p, x.id);
+    return g + `<tr><td>${esc(x.name)}</td><td class="r">${fmtH(x.h)} h</td><td class="r">${b.dep ? '+' + fmtH(b.dep / 100) : ''}${(b.wd || 0) + (b.buyBank || 0) ? ' −' + fmtH(((b.wd || 0) + (b.buyBank || 0)) / 100) : ''}${b.bal ? ` <span style="color:#666">(solde ${fmtH(b.bal / 100)})</span>` : ''}</td><td class="big">${fmtH((b.h - b.dep + b.wd - (b.buyPay || 0)) / 100)} h${b.buyH ? `<span style="font:400 9px var(--body);color:#555;display:block">achat ${fmtH(b.buyH / 100)} h${b.buyBank ? ` (${fmtH(b.buyBank / 100)} en banque)` : ''}</span>` : ''}${sn ? `<span style="font:700 10px var(--body);color:#111;display:block">${sn}</span>` : ''}</td>${nh ? `<td class="r">${b.ferH ? `${fmtH(b.ferH / 100)} h<span style="font:400 9px var(--body);color:#555;display:block">${fromC(ferAmt(x.id, p, b))}</span>` : '—'}</td>` : ''}<td class="r">${sh && sh.total ? fromC(sh.total) : '—'}</td><td class="r"><span class="box"></span></td></tr>`; }).join('')}
   </tbody><tfoot><tr><td>Total</td><td class="r">${fmtH(c.worked)} h</td><td></td><td class="r" style="font-size:15px">${fmtH(payTotal(c))} h</td>${nh ? `<td class="r">${fmtH(ft.h / 100)} h<br>${fromC(ft.m)}</td>` : ''}<td class="r">${fromC(c.dist)}</td><td></td></tr></tfoot></table>
   <div class="foot"><span>Vérifié par : ____________________</span><span>Date : ______________</span></div></article>`;
 }
