@@ -723,14 +723,15 @@ function sickNotes(p, eid) {
 function sickShort(p, eid) {
   const l = st.pay.sick.filter(x => x.employee_id === eid && x.start <= p.end && x.end >= p.start); if (!l.length) return '';
   const tot = l.reduce((t, x) => t + (x.ind ? x.ind.total : 0), 0); const todo = l.some(x => !x.ind);
-  return tot ? `Maladie = ${fromC(tot)}${todo ? ' + à calculer' : ''}` : 'Maladie à calculer';
+  const rate = rateAt(eid, p.end); const hh = rate ? fmtH(tot / 100 / rate) + ' h · ' : '';
+  return tot ? `Maladie = ${hh}${fromC(tot)}${todo ? ' + à calculer' : ''}` : 'Maladie à calculer';
 }
 const sickTag = (p, eid) => { const t = sickShort(p, eid); return t ? `<span class="small" style="display:block;color:var(--accent-text);font-weight:700">${t}</span>` : ''; };
 const ferAmt = (id, p, b) => Math.round(b.ferH / 100 * rateAt(id, p.end) * 100);
 const ferTotal = (c, p) => Object.entries(c.bk).reduce((t, [id, b]) => ({ h: t.h + (b.ferH || 0), m: t.m + (b.ferH ? ferAmt(id, p, b) : 0) }), { h: 0, m: 0 });
 function ferCell(id, c, p) {
   const b = c.bk[id] || { ferH: 0, ferOv: (p.rows[id] || {}).holOv != null }; const lk = p.locked;
-  const inner = b.ferH ? `<span class="payh" style="font-size:1.15rem">${fmtH(b.ferH / 100)} h</span><br><span class="small muted" style="font-weight:400">${fromC(ferAmt(id, p, b))}${b.ferOv ? ' · ajusté' : ''}</span>` : `<span class="muted">${b.ferOv ? '0 h · ajusté' : '—'}</span>`;
+  const inner = b.ferH ? `<span style="white-space:nowrap"><span class="payh" style="font-size:1.15rem">${fmtH(b.ferH / 100)} h</span> · <b>${fromC(ferAmt(id, p, b))}</b></span>${b.ferOv ? '<br><span class="small muted" style="font-weight:400">ajusté</span>' : ''}` : `<span class="muted">${b.ferOv ? '0 h · ajusté' : '—'}</span>`;
   return lk ? inner : `<button class="banklink" onclick="App.holEdit('${id}')" title="Ajuster les heures de férié">${inner}</button>`;
 }
 function holSection() {
@@ -762,7 +763,7 @@ function tipsView() {
   ${nh ? `<div class="banner acc"><div><b>Jour${nh > 1 ? 's' : ''} férié${nh > 1 ? 's' : ''} dans cette paye : ${hs.map(h => `${esc(h.name)} (${fs(h.date)})`).join(', ')}.</b><br><span class="small">Le férié de chacun = heures payées des 2 payes précédentes ÷ 20. Ses heures normales baissent d’autant : par exemple, 80 h travaillées = 72 h payées, 8 h en banque et 8 h de férié.</span></div></div>` : ''}</section>
   <section class="section"><div class="spread"><h2>Heures et pourboire par employé</h2><label class="check" style="font-weight:400"><input type="checkbox" ${st.tipHide ? 'checked' : ''} onchange="App.tipHideEmpty(this.checked)"><span>Masquer les employés sans heures</span></label></div>
   <div class="tablewrap"><table class="tips"><thead><tr><th>Employé</th><th class="r">Heures travaillées</th><th class="r">Banque</th><th class="r">Heures à payer</th>${nh ? '<th class="r">Férié</th>' : ''}<th class="r">Pourboire</th></tr></thead><tbody>${rowsHtml}</tbody>
-  <tfoot><tr><td>Total</td><td class="r" id="tt-all">${fmtH(c.worked)} h</td><td></td><td class="r" id="tt-pay">${fmtH(payTotal(c))} h</td>${nh ? `<td class="r">${fmtH(ft.h / 100)} h<br><span class="small muted">${fromC(ft.m)}</span></td>` : ''}<td class="r" id="tt-dist">${fromC(c.dist)}</td></tr></tfoot></table></div>
+  <tfoot><tr><td>Total</td><td class="r" id="tt-all">${fmtH(c.worked)} h</td><td></td><td class="r" id="tt-pay">${fmtH(payTotal(c))} h</td>${nh ? `<td class="r" style="white-space:nowrap">${fmtH(ft.h / 100)} h · ${fromC(ft.m)}</td>` : ''}<td class="r" id="tt-dist">${fromC(c.dist)}</td></tr></tfoot></table></div>
   <p id="tp-check">${tipCheck(c)}</p></section>
   ${holSection()}
   <section class="section"><h2>Historique des payes</h2>${tipHistory(B)}</section>
@@ -777,8 +778,8 @@ function printSheet(p, c, list) {
   <table><thead><tr><th>Employé</th><th class="r">Travaillées</th><th class="r">Banque</th><th class="r">Heures à payer</th>${nh ? '<th class="r">Férié</th>' : ''}<th class="r">Pourboire</th><th class="r">Entré</th></tr></thead><tbody>
   ${rows.map(x => { const b = c.bk[x.id] || { h: 0, dep: 0, wd: 0, bal: 0 }; const sh = c.shares[x.id]; let g = ''; if (x.grp !== lastG) { lastG = x.grp; g = `<tr class="g"><td colspan="${nh ? 7 : 6}">${TG_LABEL[x.grp]}</td></tr>`; }
     const sn = sickShort(p, x.id);
-    return g + `<tr><td>${esc(x.name)}</td><td class="r">${fmtH(x.h)} h</td><td class="r">${b.dep ? '+' + fmtH(b.dep / 100) : ''}${(b.wd || 0) + (b.buyBank || 0) ? ' −' + fmtH(((b.wd || 0) + (b.buyBank || 0)) / 100) : ''}${b.bal ? ` <span style="color:#666">(solde ${fmtH(b.bal / 100)})</span>` : ''}</td><td class="big">${fmtH((b.h - b.dep + b.wd - (b.buyPay || 0)) / 100)} h${b.buyH ? `<span style="font:400 9px var(--body);color:#555;display:block">achat ${fmtH(b.buyH / 100)} h${b.buyBank ? ` (${fmtH(b.buyBank / 100)} en banque)` : ''}</span>` : ''}${sn ? `<span style="font:700 10px var(--body);color:#111;display:block">${sn}</span>` : ''}</td>${nh ? `<td class="r">${b.ferH ? `${fmtH(b.ferH / 100)} h<span style="font:400 9px var(--body);color:#555;display:block">${fromC(ferAmt(x.id, p, b))}</span>` : '—'}</td>` : ''}<td class="r">${sh && sh.total ? fromC(sh.total) : '—'}</td><td class="r"><span class="box"></span></td></tr>`; }).join('')}
-  </tbody><tfoot><tr><td>Total</td><td class="r">${fmtH(c.worked)} h</td><td></td><td class="r" style="font-size:15px">${fmtH(payTotal(c))} h</td>${nh ? `<td class="r">${fmtH(ft.h / 100)} h<br>${fromC(ft.m)}</td>` : ''}<td class="r">${fromC(c.dist)}</td><td></td></tr></tfoot></table>
+    return g + `<tr><td>${esc(x.name)}</td><td class="r">${fmtH(x.h)} h</td><td class="r">${b.dep ? '+' + fmtH(b.dep / 100) : ''}${(b.wd || 0) + (b.buyBank || 0) ? ' −' + fmtH(((b.wd || 0) + (b.buyBank || 0)) / 100) : ''}${b.bal ? ` <span style="color:#666">(solde ${fmtH(b.bal / 100)})</span>` : ''}</td><td class="big">${fmtH((b.h - b.dep + b.wd - (b.buyPay || 0)) / 100)} h${b.buyH ? `<span style="font:400 9px var(--body);color:#555;display:block">achat ${fmtH(b.buyH / 100)} h${b.buyBank ? ` (${fmtH(b.buyBank / 100)} en banque)` : ''}</span>` : ''}${sn ? `<span style="font:700 10px var(--body);color:#111;display:block">${sn}</span>` : ''}</td>${nh ? `<td class="r" style="white-space:nowrap">${b.ferH ? `${fmtH(b.ferH / 100)} h · ${fromC(ferAmt(x.id, p, b))}` : '—'}</td>` : ''}<td class="r">${sh && sh.total ? fromC(sh.total) : '—'}</td><td class="r"><span class="box"></span></td></tr>`; }).join('')}
+  </tbody><tfoot><tr><td>Total</td><td class="r">${fmtH(c.worked)} h</td><td></td><td class="r" style="font-size:15px">${fmtH(payTotal(c))} h</td>${nh ? `<td class="r" style="white-space:nowrap">${fmtH(ft.h / 100)} h · ${fromC(ft.m)}</td>` : ''}<td class="r">${fromC(c.dist)}</td><td></td></tr></tfoot></table>
   <div class="foot"><span>Vérifié par : ____________________</span><span>Date : ______________</span></div></article>`;
 }
 function tipCheck(c) {
