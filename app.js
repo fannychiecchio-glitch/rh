@@ -638,12 +638,13 @@ async function loadPay() {
     q(sb.from('employees').select('id,first_name,last_name,poste,magasin,tip_group,start_date,active').order('last_name')), q(sb.from('app_settings').select('bank_cap,sick_per_year')),
     q(sb.from('sick_days').select('*').order('start_date')),
   ]);
+  const hol = await sb.from('holidays').select('*').order('date'); const hols = hol.error ? [] : hol.data;
   const periods = pp.map(p => ({ id: p.id, label: p.label, year: p.year, start: p.start_date, end: p.end_date, pct: Number(p.pct), laval: p.laval ? String(p.laval) : '', mtl: p.mtl ? String(p.mtl) : '', locked: p.locked, rows: {} }));
   const byId = Object.fromEntries(periods.map(p => [p.id, p]));
-  rows.forEach(r => { const p = byId[r.period_id]; if (p) p.rows[r.employee_id] = { h: Number(r.hours), grp: r.grp, name: r.name, buys: [] }; });
+  rows.forEach(r => { const p = byId[r.period_id]; if (p) p.rows[r.employee_id] = { h: Number(r.hours), grp: r.grp, name: r.name, buys: [], holOv: r.hol_override == null ? null : Number(r.hol_override) }; });
   buys.forEach(b => { const p = byId[b.period_id]; if (!p) return; const r = p.rows[b.employee_id] = p.rows[b.employee_id] || { h: 0, grp: null, name: '', buys: [] }; r.buys.push({ id: b.id, desc: b.item, qty: b.qty, unit: b.unit, unitPrice: b.unit_price, price: b.amount }); });
   const R = {}; rates.forEach(r => (R[r.employee_id] = R[r.employee_id] || []).push(r));
-  st.pay = { periods, adj, cat: Object.fromEntries(cat.map(c => [c.slug, c])), rates: R, emps: Object.fromEntries(emps.map(e => [e.id, e])), empList: emps, cap: Number(set[0]?.bank_cap) || 80, quota: set[0]?.sick_per_year ?? 2, sick: sick.map(s => ({ ...s, start: s.start_date, end: s.end_date, days: nDays(s.start_date, s.end_date) })) };
+  st.pay = { periods, adj, cat: Object.fromEntries(cat.map(c => [c.slug, c])), rates: R, emps: Object.fromEntries(emps.map(e => [e.id, e])), empList: emps, cap: Number(set[0]?.bank_cap) || 80, quota: set[0]?.sick_per_year ?? 2, sick: sick.map(s => ({ ...s, start: s.start_date, end: s.end_date, days: nDays(s.start_date, s.end_date) })), hols, holOn: !hol.error };
 }
 function tipPeriods() { return [...st.pay.periods].sort((a, b) => a.start < b.start ? 1 : -1); }
 function curTip() { const ps = tipPeriods(); let p = ps.find(x => x.id === st.tipSel); if (!p) { p = ps[0]; st.tipSel = p ? p.id : null; } return p; }
@@ -653,19 +654,31 @@ function splitCents(total, weights) {
   [...raw].sort((a, b) => (b.ex - b.fl) - (a.ex - a.fl) || a.name.localeCompare(b.name)).forEach(r => { if (rest > 0) { r.fl++; rest--; } }); return { map: Object.fromEntries(raw.map(r => [r.id, r.fl])), left: 0 };
 }
 function buyHours(eid, r, p) { if (!r || !r.buys || !r.buys.length) return 0; const rate = rateAt(eid, p.end); if (!rate) return 0; return roundQ(r.buys.reduce((t, x) => t + toC(x.price), 0) / rate); }
-// Banque d'heures : recalculée paye par paye, dans l'ordre chronologique
+// Jours fériés compris dans une paye
+const holsIn = p => (st.pay.hols || []).filter(h => h.date >= p.start && h.date <= p.end);
+// Banque d'heures et jours fériés : recalculés paye par paye, dans l'ordre chronologique.
+// Férié = (heures payées des 2 payes précédentes, max. heures normales chacune) ÷ 20, par jour férié.
+// Dans une paye avec férié, les heures normales baissent d'autant (ex. 80 − 8 = 72) : le surplus va en banque.
 function bankAll() {
   const cap = capC(); const ps = [...st.pay.periods].sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0);
   const bal = {}, led = {}, by = {}; const adjs = [...st.pay.adj].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
   const target = a => { if (a.period_id && ps.some(p => p.id === a.period_id)) return a.period_id; const p = ps.find(p => p.end >= a.date) || ps[ps.length - 1]; return p ? p.id : null; };
   const applyAdj = (a, p) => { const v = Math.round((Number(a.hours) || 0) * 100); const before = bal[a.employee_id] || 0; bal[a.employee_id] = Math.max(0, before + v); (led[a.employee_id] = led[a.employee_id] || []).push({ type: 'adj', id: a.id, eid: a.employee_id, date: a.date, label: (a.note || 'Ajustement') + (p ? ` · appliqué à ${pLabel(p)}` : ''), delta: bal[a.employee_id] - before, bal: bal[a.employee_id] }); };
   const pending = adjs.map(a => ({ a, t: target(a) }));
-  ps.forEach(p => {
+  const active = st.pay.empList.filter(e => e.active).map(e => e.id);
+  ps.forEach((p, pi) => {
     pending.filter(x => x.t === p.id).forEach(x => applyAdj(x.a, p)); by[p.id] = {};
-    Object.entries(p.rows || {}).forEach(([eid, r]) => {
-      const h = Math.round(rowH(r) * 100); const bh = buyHours(eid, r, p); if (h <= 0 && !bh) return; let b = bal[eid] || 0, dep = 0, wd = 0;
-      if (h > cap) dep = h - cap; else if (h > 0 && h < cap && b > 0) wd = Math.min(b, cap - h); b = b + dep - wd; const buyBank = Math.min(b, bh); b -= buyBank; bal[eid] = b;
-      by[p.id][eid] = { h, dep, wd, tipH: h - dep + wd, bal: b, buyH: bh, buyBank, buyPay: bh - buyBank };
+    const nh = holsIn(p).length; const prev = ps.slice(Math.max(0, pi - 2), pi);
+    const ids = new Set([...Object.keys(p.rows || {}), ...(nh ? active : [])]);
+    ids.forEach(eid => {
+      const r = (p.rows || {})[eid]; const h = Math.round(rowH(r) * 100); const bh = buyHours(eid, r, p);
+      let ferAuto = 0, ferBase = 0;
+      if (nh) { ferBase = prev.reduce((t, q2) => { const x = by[q2.id][eid]; return t + (x ? Math.min(x.h - x.dep + x.wd + (x.ferH || 0), cap) : 0); }, 0); ferAuto = Math.round(ferBase * nh / 20); }
+      const ferH = nh ? (r && r.holOv != null ? Math.round(r.holOv * 100) : ferAuto) : 0;
+      if (h <= 0 && !bh && !ferH) return;
+      const capE = Math.max(0, cap - ferH); let b = bal[eid] || 0, dep = 0, wd = 0;
+      if (h > capE) dep = h - capE; else if (h > 0 && h < capE && b > 0) wd = Math.min(b, capE - h); b = b + dep - wd; const buyBank = Math.min(b, bh); b -= buyBank; bal[eid] = b;
+      by[p.id][eid] = { h, dep, wd, tipH: h - dep + wd, bal: b, buyH: bh, buyBank, buyPay: bh - buyBank, ferH, ferAuto, ferBase, ferOv: !!(r && r.holOv != null), capE };
       if (dep || wd || buyBank) (led[eid] = led[eid] || []).push({ type: 'paye', date: p.start, end: p.end, label: pLabel(p), h, dep, wd, buyBank, bal: b });
     });
   });
@@ -702,38 +715,64 @@ function bankCell(id, c) {
   const out = (b.wd || 0) + (b.buyBank || 0); const mv = (b.dep ? `<span class="check-ok">+${fmtH(b.dep / 100)} h</span>` : '') + (out ? `${b.dep ? ' ' : ''}<span style="color:var(--warn);font-weight:700">−${fmtH(out / 100)} h</span>${b.buyBank ? `<span class="small muted" style="display:block">dont ${fmtH(b.buyBank / 100)} h achat</span>` : ''}` : '');
   return b.bal || mv ? `<button class="banklink" onclick="App.bankView('${id}')" title="Voir l’historique de la banque">${mv}${mv ? '<br>' : ''}<span class="small muted">Solde ${fmtH(b.bal / 100)} h</span></button>` : '<span class="muted">—</span>';
 }
+// Notes de maladie payée sur la feuille de paye (selon la date de l'absence)
+function sickNotes(p, eid) {
+  return st.pay.sick.filter(x => x.employee_id === eid && x.start <= p.end && x.end >= p.start).map(x => x.ind ? `Maladie payée ${range(x.start, x.end)} : ${x.ind.paid} j × ${fromC(x.ind.per)} = <b>${fromC(x.ind.total)}</b>` : `Absence maladie ${range(x.start, x.end)} · indemnité à calculer`);
+}
+const sickNoteHtml = (p, eid) => sickNotes(p, eid).map(t => `<span class="small" style="display:block;color:var(--accent-text);font-weight:600">${t}</span>`).join('');
+const ferAmt = (id, p, b) => Math.round(b.ferH / 100 * rateAt(id, p.end) * 100);
+const ferTotal = (c, p) => Object.entries(c.bk).reduce((t, [id, b]) => ({ h: t.h + (b.ferH || 0), m: t.m + (b.ferH ? ferAmt(id, p, b) : 0) }), { h: 0, m: 0 });
+function ferCell(id, c, p) {
+  const b = c.bk[id] || { ferH: 0, ferOv: (p.rows[id] || {}).holOv != null }; const lk = p.locked;
+  const inner = b.ferH ? `<span class="payh" style="font-size:1.15rem">${fmtH(b.ferH / 100)} h</span><br><span class="small muted" style="font-weight:400">${fromC(ferAmt(id, p, b))}${b.ferOv ? ' · ajusté' : ''}</span>` : `<span class="muted">${b.ferOv ? '0 h · ajusté' : '—'}</span>`;
+  return lk ? inner : `<button class="banklink" onclick="App.holEdit('${id}')" title="Ajuster les heures de férié">${inner}</button>`;
+}
+function holSection() {
+  if (!st.pay.holOn) return `<section class="panel stack"><h2>Jours fériés</h2><p class="small">Pour activer les jours fériés, colle le script <b>07-feries.sql</b> dans Supabase (SQL Editor → Run).</p></section>`;
+  const y = thisYear(); const list = (st.pay.hols || []).filter(h => h.date >= `${y}-01-01` && h.date <= `${y + 1}-12-31`);
+  const missing = [y, y + 1].filter(yy => !(st.pay.hols || []).some(h => h.date.startsWith(String(yy))));
+  return `<section class="panel stack"><div class="spread"><h2>Jours fériés</h2><div class="row">${missing.map(yy => `<button class="btn sm" onclick="App.holQc(${yy})">Ajouter les jours fériés du Québec ${yy}</button>`).join('')}</div></div>
+  ${list.length ? `<div class="list">${list.map(h => `<div class="item"><div class="grow"><b>${esc(h.name)}</b><span class="muted small">${new Date(h.date + 'T12:00').toLocaleDateString('fr-CA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div><button class="btn sm ghost" onclick="App.holDel('${h.id}')">Retirer</button></div>`).join('')}</div>` : '<div class="list"><p class="empty">Aucun jour férié inscrit.</p></div>'}
+  <form class="row" onsubmit="App.holAdd(event)" style="align-items:flex-end"><label>Date<input type="date" name="date" required></label><label style="flex:1;min-width:200px">Nom<input name="name" required placeholder="Ex. Lundi de Pâques"></label><button class="btn sm">Ajouter</button></form>
+  <p class="small muted">Pour chaque jour férié compris dans une paye : férié = heures payées des 2 payes précédentes (${fmtH(capC() / 100)} h maximum chacune) ÷ 20, payé au taux horaire. Les heures normales de cette paye baissent d’autant : par exemple, 80 h travaillées avec un férié de 8 h donnent 72 h payées, 8 h en banque et 8 h de férié. Clique sur la case Férié d’un employé pour l’ajuster (par exemple, absence injustifiée la veille ou le lendemain).</p></section>`;
+}
 function tipsView() {
   const ps = tipPeriods(), p = curTip();
   const head = `<div class="spread noprint"><div><p class="eyebrow">Administration</p><h1>Paye et pourboire</h1></div><div class="row">${ps.length ? `<select aria-label="Choisir la paye" onchange="App.tipPick(this.value)" style="width:auto">${[...new Set(ps.map(yearOf))].sort((a, b) => b - a).map(y => `<optgroup label="Payes ${y}">${ps.filter(x => yearOf(x) === y).map(x => `<option value="${x.id}" ${p && x.id === p.id ? 'selected' : ''}>${esc(pLabel(x))} · ${fs(x.start)} au ${fd(x.end)}</option>`).join('')}</optgroup>`).join('')}</select>` : ''}<button class="btn primary" onclick="App.tipNewForm()">Nouvelle paye</button></div></div>`;
   if (!p) return head + `<div class="list"><p class="empty">Aucune paye pour le moment. Clique sur « Nouvelle paye » pour commencer.</p></div>`;
   const B = bankAll(), c = tipCalc(p, B), lk = !!p.locked, dis = lk ? 'disabled' : ''; const list = tipRowsList(p); let lastG = '';
+  const hs = holsIn(p), nh = hs.length; const ft = ferTotal(c, p);
   if (st.tipPrint) return printSheet(p, c, list);
   const rowsHtml = list.map(x => {
-    let g = ''; if (x.grp !== lastG) { lastG = x.grp; g = `<tr class="grp"><td colspan="5">${TG_LABEL[x.grp]}${x.grp !== 'none' ? ` <span id="gh-${x.grp}" style="font-weight:600;letter-spacing:0;text-transform:none">· ${fmtH(c.hrs[x.grp])} h de pourboire</span>` : ''}</td></tr>`; }
+    let g = ''; if (x.grp !== lastG) { lastG = x.grp; g = `<tr class="grp"><td colspan="${nh ? 6 : 5}">${TG_LABEL[x.grp]}${x.grp !== 'none' ? ` <span id="gh-${x.grp}" style="font-weight:600;letter-spacing:0;text-transform:none">· ${fmtH(c.hrs[x.grp])} h de pourboire</span>` : ''}</td></tr>`; }
     const bu = c.buy[x.id];
-    return g + `<tr><td><span class="nm">${esc(x.name)}</span> <button class="buy${bu ? ' has' : ''}" onclick="App.buyForm('${x.id}')" aria-label="Achats de ${esc(x.name)}" title="Achat de marchandise">${CART}${bu ? `<span>−${fmtH(bu.h / 100)} h</span>` : ''}</button></td><td class="r"><input type="number" inputmode="decimal" min="0" step="0.25" id="h-${x.id}" aria-label="Heures de ${esc(x.name)}" value="${x.h || ''}" placeholder="0" ${dis} oninput="App.tipH('${x.id}',this.value)"></td><td class="r" id="bk-${x.id}">${bankCell(x.id, c)}</td><td class="r" id="pay-${x.id}">${payCell(x.id, c)}</td><td class="r share" id="tp-${x.id}">${shareCell(x.id, c)}</td></tr>`;
+    return g + `<tr><td><span class="nm">${esc(x.name)}</span> <button class="buy${bu ? ' has' : ''}" onclick="App.buyForm('${x.id}')" aria-label="Achats de ${esc(x.name)}" title="Achat de marchandise">${CART}${bu ? `<span>−${fmtH(bu.h / 100)} h</span>` : ''}</button>${sickNoteHtml(p, x.id)}</td><td class="r"><input type="number" inputmode="decimal" min="0" step="0.25" id="h-${x.id}" aria-label="Heures de ${esc(x.name)}" value="${x.h || ''}" placeholder="0" ${dis} oninput="App.tipH('${x.id}',this.value)"></td><td class="r" id="bk-${x.id}">${bankCell(x.id, c)}</td><td class="r" id="pay-${x.id}">${payCell(x.id, c)}</td>${nh ? `<td class="r" id="fe-${x.id}">${ferCell(x.id, c, p)}</td>` : ''}<td class="r share" id="tp-${x.id}">${shareCell(x.id, c)}</td></tr>`;
   }).join('');
   return head + `
   <section class="panel stack"><div class="spread"><div><span class="eyebrow">Période de paye</span><h2>${esc(pLabel(p))}</h2></div><div class="row"><span id="tp-save" class="small muted"></span>${lk ? '<span class="pill p-mute">Verrouillée</span>' : ''}<button class="btn sm" onclick="App.tipLock()">${lk ? 'Déverrouiller' : 'Verrouiller la paye'}</button><button class="btn sm" onclick="App.tipCopy()">Copier le tableau</button><button class="btn sm" onclick="App.tipPrintView(true)">Feuille à imprimer</button>${lk ? '' : `<button class="btn sm ghost crit" onclick="App.tipDelAsk()">Supprimer</button>`}</div></div>
   <div class="tipin" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))"><label>Nom de la paye<input value="${esc(pLabel(p))}" ${dis} onchange="App.tipField('label',this.value)"></label><label>Année de paye<input type="number" min="2000" max="2100" value="${yearOf(p)}" ${dis} onchange="App.tipField('year',this.value)"></label><label>Du<input type="date" value="${p.start}" ${dis} onchange="App.tipField('start',this.value)"></label><label>Au<input type="date" value="${p.end}" ${dis} onchange="App.tipField('end',this.value)"></label><label>Part de la vente (%)<input type="number" min="0" max="100" step="1" id="tp-pct" value="${p.pct}" ${dis} oninput="App.tipAmt('pct',this.value)"></label></div>
   <div class="tipin" style="grid-template-columns:1fr 1fr"><label>Pourboires reçus à Laval<div class="money"><input type="number" inputmode="decimal" min="0" step="0.01" id="tp-laval" value="${p.laval || ''}" placeholder="0,00" ${dis} oninput="App.tipAmt('laval',this.value)"><span>$</span></div></label><label>Pourboires reçus à Montréal<div class="money"><input type="number" inputmode="decimal" min="0" step="0.01" id="tp-mtl" value="${p.mtl || ''}" placeholder="0,00" ${dis} oninput="App.tipAmt('mtl',this.value)"><span>$</span></div></label></div>
-  <div class="pools">${['laval', 'mtl', 'prod'].map(g => `<div class="pool ${g === 'prod' ? 'prod' : ''}"><span>${TG_LABEL[g]} · <span id="pl-${g}-d">${g === 'prod' ? `${100 - p.pct} % de Laval + ${100 - p.pct} % de Montréal` : `${p.pct} % de ${g === 'laval' ? 'Laval' : 'Montréal'}`}</span></span><b id="pl-${g}">${fromC(c.pools[g])}</b><span id="pl-${g}-h">${fmtH(c.hrs[g])} h · ${c.hrs[g] ? money(c.pools[g] / 100 / c.hrs[g]) + ' / h' : 'aucune heure'}</span></div>`).join('')}</div></section>
+  <div class="pools">${['laval', 'mtl', 'prod'].map(g => `<div class="pool ${g === 'prod' ? 'prod' : ''}"><span>${TG_LABEL[g]} · <span id="pl-${g}-d">${g === 'prod' ? `${100 - p.pct} % de Laval + ${100 - p.pct} % de Montréal` : `${p.pct} % de ${g === 'laval' ? 'Laval' : 'Montréal'}`}</span></span><b id="pl-${g}">${fromC(c.pools[g])}</b><span id="pl-${g}-h">${fmtH(c.hrs[g])} h · ${c.hrs[g] ? money(c.pools[g] / 100 / c.hrs[g]) + ' / h' : 'aucune heure'}</span></div>`).join('')}</div>
+  ${nh ? `<div class="banner acc"><div><b>Jour${nh > 1 ? 's' : ''} férié${nh > 1 ? 's' : ''} dans cette paye : ${hs.map(h => `${esc(h.name)} (${fs(h.date)})`).join(', ')}.</b><br><span class="small">Le férié de chacun = heures payées des 2 payes précédentes ÷ 20. Ses heures normales baissent d’autant : par exemple, 80 h travaillées = 72 h payées, 8 h en banque et 8 h de férié.</span></div></div>` : ''}</section>
   <section class="section"><div class="spread"><h2>Heures et pourboire par employé</h2><label class="check" style="font-weight:400"><input type="checkbox" ${st.tipHide ? 'checked' : ''} onchange="App.tipHideEmpty(this.checked)"><span>Masquer les employés sans heures</span></label></div>
-  <div class="tablewrap"><table class="tips"><thead><tr><th>Employé</th><th class="r">Heures travaillées</th><th class="r">Banque</th><th class="r">Heures à payer</th><th class="r">Pourboire</th></tr></thead><tbody>${rowsHtml}</tbody>
-  <tfoot><tr><td>Total</td><td class="r" id="tt-all">${fmtH(c.worked)} h</td><td></td><td class="r" id="tt-pay">${fmtH(payTotal(c))} h</td><td class="r" id="tt-dist">${fromC(c.dist)}</td></tr></tfoot></table></div>
+  <div class="tablewrap"><table class="tips"><thead><tr><th>Employé</th><th class="r">Heures travaillées</th><th class="r">Banque</th><th class="r">Heures à payer</th>${nh ? '<th class="r">Férié</th>' : ''}<th class="r">Pourboire</th></tr></thead><tbody>${rowsHtml}</tbody>
+  <tfoot><tr><td>Total</td><td class="r" id="tt-all">${fmtH(c.worked)} h</td><td></td><td class="r" id="tt-pay">${fmtH(payTotal(c))} h</td>${nh ? `<td class="r">${fmtH(ft.h / 100)} h<br><span class="small muted">${fromC(ft.m)}</span></td>` : ''}<td class="r" id="tt-dist">${fromC(c.dist)}</td></tr></tfoot></table></div>
   <p id="tp-check">${tipCheck(c)}</p></section>
+  ${holSection()}
   <section class="section"><h2>Historique des payes</h2>${tipHistory(B)}</section>
   <section class="panel stack"><h2>Comment le calcul fonctionne</h2><ul class="plain"><li>La vente de Laval se partage ${p.pct} % des pourboires de Laval, et la vente de Montréal ${p.pct} % des pourboires de Montréal. La production se partage les ${100 - p.pct} % restants des deux magasins.</li><li>Chaque employé reçoit une part proportionnelle à ses heures, dans le groupe de pourboire choisi dans son profil. Les employés réglés sur « Aucun pourboire » sont dans le groupe Sans pourboire.</li><li>L’icône de panier à côté du nom sert à inscrire un achat de marchandise. Le montant est converti en heures selon le taux horaire de l’employé, arrondi au quart d’heure supérieur, puis pris d’abord dans sa banque d’heures; le reste est retiré des heures à payer. Le pourboire reste calculé sur les heures travaillées.</li><li>Au-delà de ${fmtH(capC() / 100)} heures dans une paye, les heures en trop vont dans la banque, sans pourboire. Sous ${fmtH(capC() / 100)} heures, la banque complète automatiquement jusqu’à ${fmtH(capC() / 100)} heures, et ces heures reçoivent du pourboire.</li><li>Les montants sont arrondis au cent près, et le total versé égale exactement le total reçu.</li><li>Chaque changement est enregistré automatiquement. Verrouille la paye une fois entrée dans ton logiciel de paye : plus rien ne pourra la modifier.</li></ul>
   <form class="row" onsubmit="App.bankCap(event)" style="align-items:flex-end"><label style="max-width:260px">Heures normales par paye<input type="number" min="1" max="200" step="0.5" name="cap" value="${String(capC() / 100)}"></label><button class="btn sm">Enregistrer</button></form></section>`;
 }
 function printSheet(p, c, list) {
-  const rows = list.filter(x => x.h > 0); let lastG = '';
+  const hs = holsIn(p), nh = hs.length, ft = ferTotal(c, p);
+  const rows = list.filter(x => x.h > 0 || (c.bk[x.id] && c.bk[x.id].ferH) || sickNotes(p, x.id).length); let lastG = '';
   return `<div class="row noprint" style="justify-content:space-between"><button class="btn" onclick="App.tipPrintView(false)">← Retour au tableau</button><button class="btn primary" onclick="window.print()">Imprimer</button></div>
-  <article class="printsheet"><div class="ph"><div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase">Marius &amp; Fanny · Paye et pourboire</div><h2>${esc(pLabel(p))}</h2></div><div style="text-align:right;font-size:12px">${fd(p.start)} au ${fd(p.end)}<br>Laval ${fromC(c.L)} · Montréal ${fromC(c.M)} · <b>Total ${fromC(c.total)}</b></div></div>
-  <table><thead><tr><th>Employé</th><th class="r">Travaillées</th><th class="r">Banque</th><th class="r">Heures à payer</th><th class="r">Pourboire</th><th class="r">Entré</th></tr></thead><tbody>
-  ${rows.map(x => { const b = c.bk[x.id] || { h: 0, dep: 0, wd: 0, bal: 0 }; const sh = c.shares[x.id]; let g = ''; if (x.grp !== lastG) { lastG = x.grp; g = `<tr class="g"><td colspan="6">${TG_LABEL[x.grp]}</td></tr>`; }
-    return g + `<tr><td>${esc(x.name)}</td><td class="r">${fmtH(x.h)} h</td><td class="r">${b.dep ? '+' + fmtH(b.dep / 100) : ''}${(b.wd || 0) + (b.buyBank || 0) ? ' −' + fmtH(((b.wd || 0) + (b.buyBank || 0)) / 100) : ''}${b.bal ? ` <span style="color:#666">(solde ${fmtH(b.bal / 100)})</span>` : ''}</td><td class="big">${fmtH((b.h - b.dep + b.wd - (b.buyPay || 0)) / 100)} h${b.buyH ? `<span style="font:400 9px var(--body);color:#555;display:block">achat ${fmtH(b.buyH / 100)} h${b.buyBank ? ` (${fmtH(b.buyBank / 100)} en banque)` : ''}</span>` : ''}</td><td class="r">${sh && sh.total ? fromC(sh.total) : '—'}</td><td class="r"><span class="box"></span></td></tr>`; }).join('')}
-  </tbody><tfoot><tr><td>Total</td><td class="r">${fmtH(c.worked)} h</td><td></td><td class="r" style="font-size:15px">${fmtH(payTotal(c))} h</td><td class="r">${fromC(c.dist)}</td><td></td></tr></tfoot></table>
+  <article class="printsheet"><div class="ph"><div><div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase">Marius &amp; Fanny · Paye et pourboire</div><h2>${esc(pLabel(p))}</h2></div><div style="text-align:right;font-size:12px">${fd(p.start)} au ${fd(p.end)}<br>Laval ${fromC(c.L)} · Montréal ${fromC(c.M)} · <b>Total ${fromC(c.total)}</b>${nh ? `<br>Férié : ${hs.map(h => `${esc(h.name)} (${fs(h.date)})`).join(', ')}` : ''}</div></div>
+  <table><thead><tr><th>Employé</th><th class="r">Travaillées</th><th class="r">Banque</th><th class="r">Heures à payer</th>${nh ? '<th class="r">Férié</th>' : ''}<th class="r">Pourboire</th><th class="r">Entré</th></tr></thead><tbody>
+  ${rows.map(x => { const b = c.bk[x.id] || { h: 0, dep: 0, wd: 0, bal: 0 }; const sh = c.shares[x.id]; let g = ''; if (x.grp !== lastG) { lastG = x.grp; g = `<tr class="g"><td colspan="${nh ? 7 : 6}">${TG_LABEL[x.grp]}</td></tr>`; }
+    const sn = sickNotes(p, x.id);
+    return g + `<tr><td>${esc(x.name)}${sn.map(t => `<span style="font:400 9px var(--body);color:#333;display:block">${t}</span>`).join('')}</td><td class="r">${fmtH(x.h)} h</td><td class="r">${b.dep ? '+' + fmtH(b.dep / 100) : ''}${(b.wd || 0) + (b.buyBank || 0) ? ' −' + fmtH(((b.wd || 0) + (b.buyBank || 0)) / 100) : ''}${b.bal ? ` <span style="color:#666">(solde ${fmtH(b.bal / 100)})</span>` : ''}</td><td class="big">${fmtH((b.h - b.dep + b.wd - (b.buyPay || 0)) / 100)} h${b.buyH ? `<span style="font:400 9px var(--body);color:#555;display:block">achat ${fmtH(b.buyH / 100)} h${b.buyBank ? ` (${fmtH(b.buyBank / 100)} en banque)` : ''}</span>` : ''}</td>${nh ? `<td class="r">${b.ferH ? `${fmtH(b.ferH / 100)} h<span style="font:400 9px var(--body);color:#555;display:block">${fromC(ferAmt(x.id, p, b))}</span>` : '—'}</td>` : ''}<td class="r">${sh && sh.total ? fromC(sh.total) : '—'}</td><td class="r"><span class="box"></span></td></tr>`; }).join('')}
+  </tbody><tfoot><tr><td>Total</td><td class="r">${fmtH(c.worked)} h</td><td></td><td class="r" style="font-size:15px">${fmtH(payTotal(c))} h</td>${nh ? `<td class="r">${fmtH(ft.h / 100)} h<br>${fromC(ft.m)}</td>` : ''}<td class="r">${fromC(c.dist)}</td><td></td></tr></tfoot></table>
   <div class="foot"><span>Vérifié par : ____________________</span><span>Date : ______________</span></div></article>`;
 }
 function tipCheck(c) {
@@ -755,7 +794,7 @@ function tipsRefresh() {
   const p = curTip(); if (!p) return; const c = tipCalc(p);
   TG.forEach(g => { const el = $('#pl-' + g); if (el) el.textContent = fromC(c.pools[g]); const h = $('#pl-' + g + '-h'); if (h) h.textContent = `${fmtH(c.hrs[g])} h · ${c.hrs[g] ? money(c.pools[g] / 100 / c.hrs[g]) + ' / h' : 'aucune heure'}`;
     const d = $('#pl-' + g + '-d'); if (d) d.textContent = g === 'prod' ? `${100 - p.pct} % de Laval + ${100 - p.pct} % de Montréal` : `${p.pct} % de ${g === 'laval' ? 'Laval' : 'Montréal'}`; const gh = $('#gh-' + g); if (gh) gh.textContent = '· ' + fmtH(c.hrs[g]) + ' h de pourboire'; });
-  document.querySelectorAll('td.share[id^="tp-"]').forEach(td => { const id = td.id.slice(3); td.innerHTML = shareCell(id, c); const bk = $('#bk-' + id); if (bk) bk.innerHTML = bankCell(id, c); const py = $('#pay-' + id); if (py) py.innerHTML = payCell(id, c); });
+  document.querySelectorAll('td.share[id^="tp-"]').forEach(td => { const id = td.id.slice(3); td.innerHTML = shareCell(id, c); const bk = $('#bk-' + id); if (bk) bk.innerHTML = bankCell(id, c); const py = $('#pay-' + id); if (py) py.innerHTML = payCell(id, c); const fe = $('#fe-' + id); if (fe) fe.innerHTML = ferCell(id, c, p); });
   const tp = $('#tt-pay'); if (tp) tp.textContent = fmtH(payTotal(c)) + ' h';
   const ta = $('#tt-all'); if (ta) ta.textContent = fmtH(c.worked) + ' h'; const dt = $('#tt-dist'); if (dt) dt.textContent = fromC(c.dist); const ck = $('#tp-check'); if (ck) ck.innerHTML = tipCheck(c);
 }
@@ -785,7 +824,7 @@ function sickStats(e, y) { y = y || thisYear(); const ys = sickYear(e, y), al = 
 function dayBoxes(s) { return `<div class="daybox" role="img" aria-label="${s.paid} sur ${quota()} jours utilisés">${[...Array(quota())].map((_, i) => `<i class="${i < s.paid ? 'used' : ''}"></i>`).join('')}</div>`; }
 function lastTwoPays(e) {
   const B = bankAll(); const ps = [...st.pay.periods].sort((a, b) => a.start < b.start ? 1 : -1).filter(p => B.by[p.id] && B.by[p.id][e.id]).slice(0, 2).reverse(); if (ps.length < 2) return null;
-  return ps.map(p => { const b = B.by[p.id][e.id]; const h = Math.min(b.h - b.dep + b.wd, capC()); return Math.round(h / 100 * rateAt(e.id, p.end) * 100); });
+  return ps.map(p => { const b = B.by[p.id][e.id]; const h = Math.min(b.h - b.dep + b.wd + (b.ferH || 0), capC()); return Math.round(h / 100 * rateAt(e.id, p.end) * 100); });
 }
 function sickItems(e) {
   const al = sickAlloc(e, thisYear()); const list = [...sickOf(e)].sort((a, b) => a.start < b.start ? 1 : -1);
@@ -1400,14 +1439,45 @@ const App = {
   },
   tipH(id, v) {
     const p = curTip(); if (!p || p.locked) return; const e = empP(id); const prev = p.rows[id]; const h = Math.max(0, parseFloat(String(v).replace(',', '.')) || 0);
-    if (!h && !(prev && prev.buys && prev.buys.length)) delete p.rows[id];
+    if (!h && !(prev && ((prev.buys && prev.buys.length) || prev.holOv != null))) delete p.rows[id];
     else p.rows[id] = { ...(prev || { buys: [] }), name: e ? fullname(e) : (prev && prev.name) || '', grp: prev && rowH(prev) > 0 ? rowG(prev, e) : (e ? tipGroupOf(e) : 'prod'), h };
     tipsRefresh(); App.tipSaving('Enregistrement…');
     App._th = App._th || {}; clearTimeout(App._th[id]); App._th[id] = setTimeout(async () => {
       const r = p.rows[id];
-      try { if (r && r.h > 0) await q(sb.from('pay_rows').upsert({ period_id: p.id, employee_id: id, hours: r.h, grp: r.grp, name: r.name })); else await q(sb.from('pay_rows').delete().eq('period_id', p.id).eq('employee_id', id)); App.tipSaving('Enregistré'); }
+      try { if (r && (r.h > 0 || r.holOv != null)) await q(sb.from('pay_rows').upsert({ period_id: p.id, employee_id: id, hours: r.h, grp: r.grp, name: r.name, ...(st.pay.holOn ? { hol_override: r.holOv ?? null } : {}) })); else await q(sb.from('pay_rows').delete().eq('period_id', p.id).eq('employee_id', id)); App.tipSaving('Enregistré'); }
       catch (e) { App.tipSaving('Erreur d’enregistrement'); fail(e); }
     }, 600);
+  },
+  holEdit(id) {
+    const p = curTip(); if (!p || p.locked) return; const b = (bankAll().by[p.id] || {})[id] || { ferAuto: 0, ferBase: 0, ferOv: false, ferH: 0 }; const e = empP(id); const r = p.rows[id];
+    modal(`Férié · ${e ? fullname(e) : ''}`, `<form class="stack" onsubmit="App.holSave(event,'${id}')"><p class="muted" style="margin-top:-6px">${esc(pLabel(p))} · ${holsIn(p).map(h => esc(h.name)).join(', ')}</p>
+    <div class="panel" style="background:var(--blue);border:0;padding:14px"><span class="small" style="color:var(--accent-text)">Calcul automatique : ${fmtH(b.ferBase / 100)} h payées dans les 2 payes précédentes ÷ 20${holsIn(p).length > 1 ? ` × ${holsIn(p).length} jours` : ''} = <b>${fmtH(b.ferAuto / 100)} h</b>, soit ${fromC(Math.round(b.ferAuto / 100 * rateAt(id, p.end) * 100))} au taux de ${money(rateAt(id, p.end))} / h.</span></div>
+    <label style="max-width:260px">Heures de férié à payer<input type="number" step="0.25" min="0" name="h" value="${r && r.holOv != null ? r.holOv : ''}" placeholder="${String(b.ferAuto / 100)} (automatique)"></label>
+    <p class="small muted">Laisse vide pour garder le calcul automatique. Mets 0 si l’employé n’a pas droit au férié, par exemple après une absence injustifiée la veille ou le lendemain.</p>
+    <div class="row"><button class="btn primary">Enregistrer</button>${r && r.holOv != null ? `<button type="button" class="btn" onclick="App.holSave(null,'${id}',true)">Revenir au calcul automatique</button>` : ''}<button type="button" class="btn ghost" onclick="App.close()">Annuler</button></div></form>`);
+  },
+  async holSave(ev, id, reset) {
+    const p = curTip(); const e = empP(id); let v = null;
+    if (ev) { const f = formData(ev); v = String(f.h).trim() === '' ? null : Math.max(0, parseFloat(String(f.h).replace(',', '.')) || 0); }
+    if (reset) v = null;
+    const prev = p.rows[id]; const row = prev || { h: 0, grp: e ? tipGroupOf(e) : 'prod', name: e ? fullname(e) : '', buys: [] };
+    try {
+      if (v == null && !(row.h > 0)) await q(sb.from('pay_rows').delete().eq('period_id', p.id).eq('employee_id', id));
+      else await q(sb.from('pay_rows').upsert({ period_id: p.id, employee_id: id, hours: row.h || 0, grp: row.grp || (e ? tipGroupOf(e) : 'prod'), name: row.name || (e ? fullname(e) : ''), hol_override: v }));
+      closeModal(); toast(v == null ? 'Férié calculé automatiquement.' : 'Férié ajusté.'); await loadPage();
+    } catch (x) { fail(x); }
+  },
+  async holAdd(ev) { const f = formData(ev); try { await q(sb.from('holidays').insert({ date: f.date, name: f.name.trim() })); toast('Jour férié ajouté.'); await loadPage(); } catch (e) { fail(/duplicate|unique/i.test(errMsg(e)) ? new Error('Ce jour est déjà inscrit.') : e); } },
+  async holDel(id) { if (!confirm('Retirer ce jour férié?')) return; try { await q(sb.from('holidays').delete().eq('id', id)); toast('Jour férié retiré.'); await loadPage(); } catch (e) { fail(e); } },
+  async holQc(y) {
+    const d = (m, dd) => iso(new Date(y, m - 1, dd)); const nth = (m, wd, n) => { const x = new Date(y, m - 1, 1); while (x.getDay() !== wd) x.setDate(x.getDate() + 1); x.setDate(x.getDate() + 7 * (n - 1)); return iso(x); };
+    const a = y % 19, b = Math.floor(y / 100), c = y % 100, dd = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - dd - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const em = Math.floor((h + l - 7 * m + 114) / 31), ed = ((h + l - 7 * m + 114) % 31) + 1; const gf = new Date(y, em - 1, ed); gf.setDate(gf.getDate() - 2);
+    const pat = new Date(y, 4, 24); while (pat.getDay() !== 1) pat.setDate(pat.getDate() - 1);
+    const can = new Date(y, 6, 1); if (can.getDay() === 0) can.setDate(2);
+    const list = [[d(1, 1), 'Jour de l’An'], [iso(gf), 'Vendredi saint'], [iso(pat), 'Journée nationale des patriotes'], [d(6, 24), 'Fête nationale du Québec'], [iso(can), 'Fête du Canada'], [nth(9, 1, 1), 'Fête du Travail'], [nth(10, 1, 2), 'Action de grâces'], [d(12, 25), 'Noël']];
+    const have = new Set((st.pay.hols || []).map(x => x.date)); const rows = list.filter(([dt]) => !have.has(dt)).map(([date, name]) => ({ date, name }));
+    try { if (rows.length) await q(sb.from('holidays').insert(rows)); toast(`${rows.length} jours fériés ajoutés pour ${y}. Vérifie-les : tu peux remplacer le Vendredi saint par le lundi de Pâques.`); await loadPage(); } catch (x) { fail(x); }
   },
   buyForm(id) {
     const p = curTip(); const e = empP(id); const r = p.rows[id] || {}; const buys = r.buys || []; const rate = rateAt(id, p.end); const lk = !!p.locked;
@@ -1445,7 +1515,7 @@ const App = {
   async tipDel() { const p = curTip(); try { await q(sb.from('pay_periods').delete().eq('id', p.id)); st.tipSel = null; closeModal(); toast('Paye supprimée.'); await loadPage(); } catch (e) { fail(e); } },
   tipCopy() {
     const p = curTip(), c = tipCalc(p); const fmt = n => String(n).replace('.', ',');
-    const lines = [['Employé', 'Groupe', 'Heures travaillées', 'Heures à payer', 'Pourboire ($)', 'Banque (+/-)', 'Solde banque', 'Achats (h)'].join('\t'), ...tipRowsList(p).filter(x => x.h > 0).map(x => { const b = c.bk[x.id] || { tipH: 0, dep: 0, wd: 0, bal: 0, h: 0 }; return [x.name, TG_LABEL[x.grp], fmt(x.h), fmt((b.h - b.dep + b.wd - (b.buyPay || 0)) / 100), fmt(((c.shares[x.id] || { total: 0 }).total / 100).toFixed(2)), fmt((b.dep - b.wd - (b.buyBank || 0)) / 100), fmt(b.bal / 100), fmt((b.buyH || 0) / 100)].join('\t'); }), ['Total', '', fmt(c.worked), fmt(payTotal(c)), fmt((c.dist / 100).toFixed(2)), '', '', ''].join('\t')].join('\n');
+    const lines = [['Employé', 'Groupe', 'Heures travaillées', 'Heures à payer', 'Férié (h)', 'Férié ($)', 'Maladie payée ($)', 'Pourboire ($)', 'Banque (+/-)', 'Solde banque', 'Achats (h)'].join('\t'), ...tipRowsList(p).filter(x => x.h > 0 || (c.bk[x.id] && c.bk[x.id].ferH)).map(x => { const b = c.bk[x.id] || { tipH: 0, dep: 0, wd: 0, bal: 0, h: 0, ferH: 0 }; const sk = st.pay.sick.filter(z => z.employee_id === x.id && z.ind && z.start <= p.end && z.end >= p.start).reduce((t, z) => t + z.ind.total, 0); return [x.name, TG_LABEL[x.grp], fmt(x.h), fmt((b.h - b.dep + b.wd - (b.buyPay || 0)) / 100), fmt((b.ferH || 0) / 100), fmt((b.ferH ? ferAmt(x.id, p, b) / 100 : 0).toFixed(2)), fmt((sk / 100).toFixed(2)), fmt(((c.shares[x.id] || { total: 0 }).total / 100).toFixed(2)), fmt((b.dep - b.wd - (b.buyBank || 0)) / 100), fmt(b.bal / 100), fmt((b.buyH || 0) / 100)].join('\t'); }), ['Total', '', fmt(c.worked), fmt(payTotal(c)), fmt(ferTotal(c, p).h / 100), fmt((ferTotal(c, p).m / 100).toFixed(2)), '', fmt((c.dist / 100).toFixed(2)), '', '', ''].join('\t')].join('\n');
     try { navigator.clipboard.writeText(lines).then(() => toast('Tableau copié. Colle-le dans Excel.'), () => toast('La copie a été refusée par le navigateur.')); } catch (e) { toast('La copie a été refusée par le navigateur.'); }
   },
   async bankCap(ev) { const f = formData(ev); const v = Math.max(1, parseFloat(String(f.cap).replace(',', '.')) || 80); try { await q(sb.from('app_settings').update({ bank_cap: v }).eq('id', 1)); toast(`${fmtH(v)} heures normales par paye.`); await loadPage(); } catch (e) { fail(e); } },

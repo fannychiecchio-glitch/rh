@@ -39,6 +39,11 @@ Plateforme RH des employés de Marius & Fanny (pâtisserie-boulangerie, Laval et
 
 1. **Base de données** — SQL Editor → New query : coller `supabase/06-documents.sql`, puis Run. Crée l'espace de stockage privé `docs` et ses règles d'accès.
 
+## Jours fériés
+
+1. **Base de données** — SQL Editor → New query : coller `supabase/07-feries.sql`, puis Run.
+2. Paye et pourboire → Jours fériés : « Ajouter les jours fériés du Québec ».
+
 ## Sécurité
 
 - Le compte administrateur exige la validation en deux étapes (TOTP) : sans elle, la base refuse l'accès aux données d'administration.
